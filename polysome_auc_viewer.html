@@ -90,7 +90,8 @@
     <button id="dlx">Export to Excel (.xlsx)</button>
     <span class="note" style="margin-left:8px">Excel export: a Summary tab (settings + all AUCs/ratios + a combined
     chart of every trace, viewer colors) plus one tab per sample with the trace data and a native Excel chart.
-    Positions are exported as displayed, i.e. aligned when alignment is on.</span>
+    Both toggles carry over: positions are exported as displayed (aligned when alignment is on), and when the
+    y-axis fit is on, the chart y-axes are capped to the mono/poly region maximum (adjustable in Excel).</span>
   </div>
   <div class="note">AUC = trapezoidal integral of baseline-corrected OD over the region (units: OD·mm).
     The ratio is unitless and independent of loading and path length as long as both regions come from the same trace.
@@ -539,7 +540,12 @@ function serXml(sheet, idx, name, n, color) {
 <c:smooth val="0"/></c:ser>`;
 }
 
-function chartXml(sers, title, withLegend) {
+function chartXml(sers, title, withLegend, yMax) {
+  // yMax (optional, finite number): cap the value axis like the viewer's
+  // "fit y-axis to the mono/poly regions" toggle. Schema order inside
+  // c:scaling is orientation, max, min.
+  const yScale = `<c:scaling><c:orientation val="minMax"/>${
+    Number.isFinite(yMax) ? `<c:max val="${yMax}"/><c:min val="0"/>` : ""}</c:scaling>`;
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" ${XA} ${XR}>
 <c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>${xesc(title)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>
@@ -550,10 +556,20 @@ ${sers}
 <c:valAx><c:axId val="111111111"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/>
 <c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>Position (mm)</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>
 <c:crossAx val="222222222"/></c:valAx>
-<c:valAx><c:axId val="222222222"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/>
+<c:valAx><c:axId val="222222222"/>${yScale}<c:delete val="0"/><c:axPos val="l"/>
 <c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>OD 260 nm</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>
 <c:crossAx val="111111111"/></c:valAx>
 </c:plotArea>${withLegend ? '<c:legend><c:legendPos val="b"/><c:overlay val="0"/></c:legend>' : ""}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart></c:chartSpace>`;
+}
+
+// tallest OD inside the mono/poly window (shifted positions), for y-axis caps
+function regionYMax(t) {
+  let m = -Infinity;
+  for (let i = 0; i < t.x.length; i++) {
+    const xv = px_(t, i);
+    if (xv >= bounds.m1 && xv <= bounds.p3 && t.y[i] > m) m = t.y[i];
+  }
+  return m;
 }
 
 function drawingXml(c1, r1, c2, r2) {
@@ -579,16 +595,20 @@ function buildXlsx() {
   // Summary sheet
   const sHead = ["Sample","AUC monosome","AUC polysomes","Mono / Poly","Poly / Mono","x-shift (mm)","Baseline"];
   let sm = `<row r="1">` + sHead.map((h, c) => cellS(1, c + 1, h)).join("") + `</row>`;
+  // numeric cell only for finite values — <v>NaN</v> is invalid OOXML
+  const cellV = (rn, c, v, d) => Number.isFinite(v) ? cellN(rn, c, v.toFixed(d)) : cellS(rn, c, "n/a");
   rows.forEach((r, i) => {
     const rn = i + 2;
-    sm += `<row r="${rn}">` + cellS(rn, 1, r.name) + cellN(rn, 2, r.aucM.toFixed(5)) +
-      cellN(rn, 3, r.aucP.toFixed(5)) + cellN(rn, 4, r.mp.toFixed(5)) + cellN(rn, 5, r.pm.toFixed(5)) +
-      cellN(rn, 6, (r.off || 0).toFixed(2)) + cellS(rn, 7, r.bl) + `</row>`;
+    sm += `<row r="${rn}">` + cellS(rn, 1, r.name) + cellV(rn, 2, r.aucM, 5) +
+      cellV(rn, 3, r.aucP, 5) + cellV(rn, 4, r.mp, 5) + cellV(rn, 5, r.pm, 5) +
+      cellV(rn, 6, r.off || 0, 2) + cellS(rn, 7, r.bl) + `</row>`;
   });
   const setRow0 = rows.length + 3;
+  const fitY = document.getElementById("cropy").checked;
   const settings = [["Monosome from (mm)", bounds.m1], ["Monosome to / poly from (mm)", bounds.m2],
     ["Polysomes to (mm)", bounds.p3], ["Baseline mode", mode],
     ["Peak alignment", document.getElementById("alignx").checked ? "on" : "off"],
+    ["Chart y-axis fit to regions", fitY ? "on" : "off"],
     ["Exported", new Date().toISOString()], ["Tool", "polysome_auc_viewer.html"]];
   settings.forEach((kv, i) => {
     const rn = setRow0 + i;
@@ -629,8 +649,11 @@ function buildXlsx() {
     const allSers = sheets.map((sh, i) =>
       serXml(sh.name, i, sh.t.name, sh.t.x.length, hexCol(sh.t.color))).join("");
     const alignedOn = document.getElementById("alignx").checked;
+    let gMax = -Infinity;
+    if (fitY) for (const sh of sheets) gMax = Math.max(gMax, regionYMax(sh.t));
     files.push({ name: "xl/charts/chart1.xml",
-                 text: chartXml(allSers, alignedOn ? "All traces (aligned at monosome peak)" : "All traces", true) });
+                 text: chartXml(allSers, alignedOn ? "All traces (aligned at monosome peak)" : "All traces",
+                                true, isFinite(gMax) ? +(gMax * 1.1).toPrecision(4) : undefined) });
     ct.push(`<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>`);
     ct.push(`<Override PartName="/xl/charts/chart1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>`);
   } else {
@@ -653,8 +676,10 @@ function buildXlsx() {
     files.push({ name: `xl/drawings/_rels/drawing${sn}.xml.rels`, text: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart${sn}.xml"/></Relationships>` });
+    const tMax = fitY ? regionYMax(t) : -Infinity;
     files.push({ name: `xl/charts/chart${sn}.xml`,
-                 text: chartXml(serXml(sh.name, 0, t.name, n, hexCol(t.color)), t.name, false) });
+                 text: chartXml(serXml(sh.name, 0, t.name, n, hexCol(t.color)), t.name, false,
+                                isFinite(tMax) ? +(tMax * 1.1).toPrecision(4) : undefined) });
     ct.push(`<Override PartName="/xl/worksheets/sheet${sn}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`);
     ct.push(`<Override PartName="/xl/drawings/drawing${sn}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>`);
     ct.push(`<Override PartName="/xl/charts/chart${sn}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>`);
