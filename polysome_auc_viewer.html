@@ -71,6 +71,7 @@
       </select></label>
     </div>
     <div class="grp"><label><input type="checkbox" id="cropy" checked> fit y-axis to the mono/poly regions (display only)</label></div>
+    <div class="grp"><label><input type="checkbox" id="alignx"> align traces at the main peak (per-run x-shift)</label></div>
   </div>
   <div id="chartwrap"></div>
   <div class="legendline">Drag the vertical lines to set regions:
@@ -81,7 +82,7 @@
 
 <div class="panel">
   <table id="results"><thead>
-    <tr><th>Sample</th><th>AUC monosome</th><th>AUC polysomes</th><th>Mono / Poly</th><th>Poly / Mono</th><th>Baseline</th></tr>
+    <tr><th data-s="name">Sample</th><th data-s="aucM">AUC monosome</th><th data-s="aucP">AUC polysomes</th><th data-s="mp">Mono / Poly</th><th data-s="pm">Poly / Mono</th><th data-s="off">x-shift (mm)</th><th data-s="blv">Baseline</th></tr>
   </thead><tbody></tbody></table>
   <div style="margin-top:10px"><button id="dl">Download results as CSV</button></div>
   <div class="note">AUC = trapezoidal integral of baseline-corrected OD over the region (units: OD·mm).
@@ -102,7 +103,12 @@
     <em>first</em> sample’s position grid — the single-trace exports are the accurate source, so prefer those.
     The duplicated readings around 0&nbsp;mm are an instrument quirk (position reset at meniscus detection);
     keep the monosome start well above that region. The “fit y-axis” toggle only zooms the display to the
-    mono/poly regions — it never changes the numbers.</div>
+    mono/poly regions — it never changes the numbers.
+    <b>Align traces at the main peak</b>: runs from the same session can be offset against each other by
+    2–4&nbsp;mm (meniscus-detection variance), which slides peaks across fixed region boundaries and can make
+    replicates disagree. This option shifts each trace so its global-maximum peak sits at the shared median
+    position (the applied shift is reported per sample and in the CSV); regions are then applied to the
+    aligned positions. Turn it on whenever the overlaid peaks visibly do not line up.</div>
 </div>
 
 <script>
@@ -110,8 +116,23 @@
 /* ---------------- parsing ---------------- */
 const COLORS = ["#e41a1c","#377eb8","#4daf4a","#984ea3","#ff7f00","#a65628",
                 "#008080","#b30059","#807dba","#e6ab02","#1b9e77","#66a61e"];
-let traces = [];           // {name, x[], y[], visible, color, file}
+let traces = [];           // {name, x[], y[], visible, color, file, off}
 let bounds = { m1: null, m2: null, p3: null };
+let sortState = { key: "name", dir: 1 };
+
+// per-run x-alignment: offset so every trace's main peak (its global OD maximum,
+// in these gradients the sharp sub-ribosomal spike) sits at the shared median
+// position. Applied to display AND integration when the checkbox is on.
+function computeAlign() {
+  const on = document.getElementById("alignx").checked;
+  const vis = traces.filter(t => t.visible);
+  if (!on || vis.length < 2) { traces.forEach(t => t.off = 0); return; }
+  const apex = t => t.x[t.y.indexOf(Math.max(...t.y))];
+  const as = vis.map(apex).sort((a, b) => a - b);
+  const ref = as[(as.length - 1) >> 1];
+  traces.forEach(t => t.off = t.visible ? +(apex(t) - ref).toFixed(2) : 0);
+}
+const px_ = (t, i) => t.x[i] - (t.off || 0);   // shifted position of point i
 
 function splitLine(l) { return l.replace(/\r$/, "").split(/,|\t/); }
 
@@ -205,13 +226,13 @@ function defaultBounds() {
 }
 
 /* ---------------- math ---------------- */
-function interp(t, x) {                      // linear interpolation of trace at x
-  const X = t.x, Y = t.y;
-  if (x <= X[0]) return Y[0];
-  if (x >= X[X.length-1]) return Y[Y.length-1];
+function interp(t, x) {                      // linear interpolation at SHIFTED position x
+  const X = t.x, Y = t.y, q = x + (t.off || 0);
+  if (q <= X[0]) return Y[0];
+  if (q >= X[X.length-1]) return Y[Y.length-1];
   let lo = 0, hi = X.length - 1;
-  while (hi - lo > 1) { const m = (lo + hi) >> 1; (X[m] <= x) ? lo = m : hi = m; }
-  const f = (x - X[lo]) / (X[hi] - X[lo]);
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; (X[m] <= q) ? lo = m : hi = m; }
+  const f = (q - X[lo]) / (X[hi] - X[lo]);
   return Y[lo] + f * (Y[hi] - Y[lo]);
 }
 
@@ -221,7 +242,7 @@ function baselineFn(t, mode) {
   if (mode === "min") {
     let mn = Infinity;
     for (let i = 0; i < t.x.length; i++)
-      if (t.x[i] >= m1 && t.x[i] <= p3 && t.y[i] < mn) mn = t.y[i];
+      if (px_(t, i) >= m1 && px_(t, i) <= p3 && t.y[i] < mn) mn = t.y[i];
     if (!isFinite(mn)) mn = 0;
     return () => mn;
   }
@@ -234,8 +255,10 @@ function aucRegion(t, a, b, bl) {
   // trapezoid over [a,b] on the baseline-corrected curve, with exact edge interpolation
   const X = [], Y = [];
   X.push(a); Y.push(interp(t, a) - bl(a));
-  for (let i = 0; i < t.x.length; i++)
-    if (t.x[i] > a && t.x[i] < b) { X.push(t.x[i]); Y.push(t.y[i] - bl(t.x[i])); }
+  for (let i = 0; i < t.x.length; i++) {
+    const xv = px_(t, i);
+    if (xv > a && xv < b) { X.push(xv); Y.push(t.y[i] - bl(xv)); }
+  }
   X.push(b); Y.push(interp(t, b) - bl(b));
   let s = 0;
   for (let i = 1; i < X.length; i++) s += (X[i] - X[i-1]) * (Y[i] + Y[i-1]) / 2;
@@ -244,15 +267,18 @@ function aucRegion(t, a, b, bl) {
 
 function computeResults() {
   const mode = document.getElementById("bmode").value;
+  computeAlign();
   return traces.filter(t => t.visible).map(t => {
     const bl = baselineFn(t, mode);
     const am = aucRegion(t, bounds.m1, bounds.m2, bl);
     const ap = aucRegion(t, bounds.m2, bounds.p3, bl);
     // a trace that does not span the regions would be silently flat-extrapolated
-    const covered = t.x[0] <= bounds.m1 + 0.2 && t.x[t.x.length - 1] >= bounds.p3 - 0.2;
+    const covered = px_(t, 0) <= bounds.m1 + 0.2 && px_(t, t.x.length - 1) >= bounds.p3 - 0.2;
     return { name: t.name + (covered ? "" : " ⚠ trace does not cover regions"),
              color: t.color, aucM: am, aucP: ap,
              mp: ap !== 0 ? am / ap : NaN, pm: am !== 0 ? ap / am : NaN,
+             off: -(t.off || 0),
+             blv: mode === "min" ? baselineFn(t, "min")(0) : NaN,
              bl: mode === "none" ? "—" : (mode === "min" ? bl(0).toFixed(4) : "chord") };
   });
 }
@@ -265,15 +291,16 @@ function render() {
   const wrap = document.getElementById("chartwrap");
   const vis = traces.filter(t => t.visible);
   if (!vis.length) { wrap.innerHTML = ""; renderTable(); return; }
-  const xmin = Math.min(...vis.map(t => t.x[0]));
-  const xmax = Math.max(...vis.map(t => t.x[t.x.length - 1]));
+  computeAlign();
+  const xmin = Math.min(...vis.map(t => px_(t, 0)));
+  const xmax = Math.max(...vis.map(t => px_(t, t.x.length - 1)));
   // y-scale: either the full traces, or (default) only the data inside the
   // mono/poly regions, so the huge sub-ribosomal/meniscus peak at the gradient
   // top does not squash the region of interest.
   const crop = document.getElementById("cropy").checked;
   let ymax = 0, ymin = 0;
   for (const t of vis) for (let i = 0; i < t.x.length; i++) {
-    if (crop && (t.x[i] < bounds.m1 || t.x[i] > bounds.p3)) continue;
+    if (crop && (px_(t, i) < bounds.m1 || px_(t, i) > bounds.p3)) continue;
     if (t.y[i] > ymax) ymax = t.y[i];
     if (t.y[i] < ymin) ymin = t.y[i];
   }
@@ -301,7 +328,7 @@ function render() {
     let d = "";
     for (let i = 0; i < t.x.length; i++) {
       const yy = Math.max(ymin, Math.min(ymax, t.y[i]));
-      d += (i ? "L" : "M") + sx(t.x[i]).toFixed(1) + " " + sy(yy).toFixed(1);
+      d += (i ? "L" : "M") + sx(px_(t, i)).toFixed(1) + " " + sy(yy).toFixed(1);
     }
     s += `<path d="${d}" fill="none" stroke="${t.color}" stroke-width="1.4" opacity="0.9"/>`;
   }
@@ -348,8 +375,11 @@ function niceTicks(a, b, n) {
 }
 
 /* ---------------- UI ---------------- */
+const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true });
+
 function renderTraceList() {
-  document.getElementById("tracelist").innerHTML = traces.map((t, i) =>
+  const order = traces.map((t, i) => ({ t, i })).sort((a, b) => byName(a.t, b.t));
+  document.getElementById("tracelist").innerHTML = order.map(({ t, i }) =>
     `<label><input type="checkbox" data-i="${i}" ${t.visible ? "checked" : ""}>` +
     `<span class="swatch" style="background:${t.color}"></span>${esc(t.name)}` +
     `<span style="color:#99a">(${t.x.length} pts)</span></label>`).join("");
@@ -359,21 +389,39 @@ function renderTraceList() {
 
 function renderTable() {
   const rows = computeResults();
+  const { key, dir } = sortState;
+  rows.sort((a, b) => dir * (key === "name" ? byName(a, b)
+    : ((isFinite(a[key]) ? a[key] : Infinity) - (isFinite(b[key]) ? b[key] : Infinity))));
+  document.querySelectorAll("#results thead th").forEach(th => {
+    const k = th.dataset.s;
+    th.textContent = th.textContent.replace(/ [▲▼]$/, "") + (k === key ? (dir === 1 ? " ▲" : " ▼") : "");
+    th.style.cursor = "pointer";
+  });
   document.querySelector("#results tbody").innerHTML = rows.map(r =>
     `<tr><td><span class="swatch" style="background:${r.color};vertical-align:-2px"></span> ${esc(r.name)}</td>` +
     `<td>${r.aucM.toFixed(3)}</td><td>${r.aucP.toFixed(3)}</td>` +
-    `<td class="ratio">${r.mp.toFixed(3)}</td><td>${r.pm.toFixed(3)}</td><td>${r.bl}</td></tr>`).join("");
+    `<td class="ratio">${r.mp.toFixed(3)}</td><td>${r.pm.toFixed(3)}</td>` +
+    `<td>${r.off ? r.off.toFixed(2) : "0"}</td><td>${r.bl}</td></tr>`).join("");
 }
+
+document.querySelectorAll("#results thead th").forEach(th =>
+  th.addEventListener("click", () => {
+    const k = th.dataset.s;
+    if (sortState.key === k) sortState.dir *= -1;
+    else { sortState.key = k; sortState.dir = 1; }
+    renderTable();
+  }));
 
 function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
 
 document.getElementById("dl").addEventListener("click", () => {
   const rows = computeResults();
-  const head = "sample,auc_monosome,auc_polysomes,mono_over_poly,poly_over_mono," +
+  const head = "sample,auc_monosome,auc_polysomes,mono_over_poly,poly_over_mono,x_shift_mm," +
                "mono_from_mm,mono_to_mm,poly_to_mm,baseline_mode\n";
   const mode = document.getElementById("bmode").value;
   const body = rows.map(r => [JSON.stringify(r.name), r.aucM.toFixed(5), r.aucP.toFixed(5),
-    r.mp.toFixed(5), r.pm.toFixed(5), bounds.m1, bounds.m2, bounds.p3, mode].join(",")).join("\n");
+    r.mp.toFixed(5), r.pm.toFixed(5), (r.off || 0).toFixed(2),
+    bounds.m1, bounds.m2, bounds.p3, mode].join(",")).join("\n");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([head + body], { type: "text/csv" }));
   a.download = "polysome_auc_results.csv";
@@ -386,6 +434,7 @@ document.getElementById("dl").addEventListener("click", () => {
 }));
 document.getElementById("bmode").addEventListener("change", render);
 document.getElementById("cropy").addEventListener("change", render);
+document.getElementById("alignx").addEventListener("change", render);
 
 const drop = document.getElementById("drop"), finput = document.getElementById("finput");
 drop.addEventListener("click", () => finput.click());
