@@ -70,7 +70,7 @@
         <option value="none">none (raw)</option>
       </select></label>
     </div>
-    <div class="grp"><label><input type="checkbox" id="cropy" checked> crop meniscus spike (display only)</label></div>
+    <div class="grp"><label><input type="checkbox" id="cropy" checked> fit y-axis to the mono/poly regions (display only)</label></div>
   </div>
   <div id="chartwrap"></div>
   <div class="legendline">Drag the vertical lines to set regions:
@@ -87,10 +87,22 @@
   <div class="note">AUC = trapezoidal integral of baseline-corrected OD over the region (units: OD·mm).
     The ratio is unitless and independent of loading and path length as long as both regions come from the same trace.
     Method: baseline per trace by the rule chosen above; identical region boundaries for every trace.</div>
+  <div class="note"><b>Baseline options</b> — the value subtracted from the curve before integrating:<br>
+    • <b>flat — minimum inside regions</b> (default): the lowest OD between the monosome start and the polysome
+    end, per trace. Robust when the trace has a flat valley inside the regions; assumes the background is
+    constant across the gradient.<br>
+    • <b>linear — between curve at region edges</b>: a straight line from the curve value at the monosome start
+    to the value at the polysome end (a “chord”). Use when the background visibly drifts upward along the
+    gradient (e.g. rising absorbance toward the bottom) — but note it goes negative wherever the curve dips
+    below the chord.<br>
+    • <b>none</b>: integrate the raw OD. Only comparable across samples if all traces share the same offset.<br>
+    The choice matters more than the integration itself — pick one, keep it for every sample in a comparison,
+    and report it (the CSV export records it).</div>
   <div class="note">Tips: multi-sample “paste-up” CSVs (e.g. <code>PT_CON_1.csv</code>) put every sample on the
     <em>first</em> sample’s position grid — the single-trace exports are the accurate source, so prefer those.
     The duplicated readings around 0&nbsp;mm are an instrument quirk (position reset at meniscus detection);
-    keep the monosome start well above that region.</div>
+    keep the monosome start well above that region. The “fit y-axis” toggle only zooms the display to the
+    mono/poly regions — it never changes the numbers.</div>
 </div>
 
 <script>
@@ -255,14 +267,18 @@ function render() {
   if (!vis.length) { wrap.innerHTML = ""; renderTable(); return; }
   const xmin = Math.min(...vis.map(t => t.x[0]));
   const xmax = Math.max(...vis.map(t => t.x[t.x.length - 1]));
+  // y-scale: either the full traces, or (default) only the data inside the
+  // mono/poly regions, so the huge sub-ribosomal/meniscus peak at the gradient
+  // top does not squash the region of interest.
   const crop = document.getElementById("cropy").checked;
   let ymax = 0, ymin = 0;
   for (const t of vis) for (let i = 0; i < t.x.length; i++) {
-    if (crop && t.x[i] < 3) continue;
+    if (crop && (t.x[i] < bounds.m1 || t.x[i] > bounds.p3)) continue;
     if (t.y[i] > ymax) ymax = t.y[i];
     if (t.y[i] < ymin) ymin = t.y[i];
   }
-  ymax *= 1.06; ymin = Math.min(0, ymin);
+  if (!(ymax > 0)) { for (const t of vis) for (const v of t.y) if (v > ymax) ymax = v; }
+  ymax *= 1.1; ymin = Math.min(0, ymin);
   const sx = x => ML + (x - xmin) / (xmax - xmin) * (W - ML - MR);
   const sy = y => MT + (1 - (y - ymin) / (ymax - ymin)) * (H - MT - MB);
 
