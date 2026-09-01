@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Polysome AUC Viewer</title>
+<style>
+  :root { --fg:#1a1a1a; --muted:#667; --line:#d8dde2; --accent:#00588b; --mono:#377eb8; --poly:#e6550d; }
+  * { box-sizing: border-box; }
+  body { font: 14px/1.45 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: var(--fg);
+         margin: 0; padding: 18px 22px; background: #fafbfc; }
+  h1 { font-size: 20px; margin: 0 0 2px; }
+  .sub { color: var(--muted); margin-bottom: 14px; }
+  .panel { background:#fff; border:1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
+  #drop { border: 2px dashed #b6c2cc; border-radius: 8px; padding: 18px; text-align: center; color: var(--muted);
+          cursor: pointer; transition: background .15s; }
+  #drop.hover { background: #eef6fb; border-color: var(--accent); }
+  #drop input { display: none; }
+  .traces { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; }
+  .traces label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+  .controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
+  .controls .grp { display: flex; align-items: center; gap: 6px; }
+  .controls input[type=number] { width: 70px; padding: 3px 5px; border: 1px solid var(--line); border-radius: 4px; }
+  .controls select { padding: 3px 5px; border: 1px solid var(--line); border-radius: 4px; }
+  #chartwrap { position: relative; }
+  svg { display: block; width: 100%; height: auto; background: #fff; }
+  .bl { cursor: ew-resize; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: right; padding: 5px 10px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 600; }
+  td.ratio { font-weight: 700; }
+  button { padding: 6px 12px; border: 1px solid var(--accent); color: var(--accent); background: #fff;
+           border-radius: 5px; cursor: pointer; font-size: 13px; }
+  button:hover { background: #eef6fb; }
+  .note { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
+  .warn { color: #a04000; font-size: 12.5px; margin-top: 6px; }
+  .legendline { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+  b.mono { color: var(--mono); } b.poly { color: var(--poly); }
+</style>
+</head>
+<body>
+<h1>Polysome AUC Viewer</h1>
+<div class="sub">Load BioComp Triax FlowCell exports (<code>.csv</code>) or plain two-column position/OD files
+(<code>.txt</code>/<code>.csv</code>). Everything runs locally in your browser — no data leaves this page.</div>
+
+<div class="panel">
+  <div id="drop">
+    <b>Drop files here</b> or click to choose (multiple allowed)
+    <input id="finput" type="file" multiple accept=".csv,.txt">
+  </div>
+  <div class="traces" id="tracelist"></div>
+  <div class="warn" id="filewarn"></div>
+</div>
+
+<div class="panel">
+  <div class="controls">
+    <div class="grp"><b class="mono">Monosome</b>
+      <label>from <input type="number" id="m1" step="0.1"> mm</label>
+      <label>to <input type="number" id="m2" step="0.1"> mm</label>
+    </div>
+    <div class="grp"><b class="poly">Polysomes</b>
+      <label>to <input type="number" id="p3" step="0.1"> mm</label>
+      <span class="note">(start = monosome end)</span>
+    </div>
+    <div class="grp"><label>Baseline
+      <select id="bmode">
+        <option value="min" selected>flat — minimum inside regions</option>
+        <option value="chord">linear — between curve at region edges</option>
+        <option value="none">none (raw)</option>
+      </select></label>
+    </div>
+    <div class="grp"><label><input type="checkbox" id="cropy" checked> crop meniscus spike (display only)</label></div>
+  </div>
+  <div id="chartwrap"></div>
+  <div class="legendline">Drag the vertical lines to set regions:
+    <b class="mono">blue = monosome (80S)</b>, <b class="poly">orange = polysomes</b>.
+    Shaded areas are what gets integrated (after baseline subtraction). Regions apply to <em>all</em> traces
+    so samples stay comparable.</div>
+</div>
+
+<div class="panel">
+  <table id="results"><thead>
+    <tr><th>Sample</th><th>AUC monosome</th><th>AUC polysomes</th><th>Mono / Poly</th><th>Poly / Mono</th><th>Baseline</th></tr>
+  </thead><tbody></tbody></table>
+  <div style="margin-top:10px"><button id="dl">Download results as CSV</button></div>
+  <div class="note">AUC = trapezoidal integral of baseline-corrected OD over the region (units: OD·mm).
+    The ratio is unitless and independent of loading and path length as long as both regions come from the same trace.
+    Method: baseline per trace by the rule chosen above; identical region boundaries for every trace.</div>
+  <div class="note">Tips: multi-sample “paste-up” CSVs (e.g. <code>PT_CON_1.csv</code>) put every sample on the
+    <em>first</em> sample’s position grid — the single-trace exports are the accurate source, so prefer those.
+    The duplicated readings around 0&nbsp;mm are an instrument quirk (position reset at meniscus detection);
+    keep the monosome start well above that region.</div>
+</div>
+
+<script>
+"use strict";
+/* ---------------- parsing ---------------- */
+const COLORS = ["#e41a1c","#377eb8","#4daf4a","#984ea3","#ff7f00","#a65628",
+                "#008080","#b30059","#807dba","#e6ab02","#1b9e77","#66a61e"];
+let traces = [];           // {name, x[], y[], visible, color, file}
+let bounds = { m1: null, m2: null, p3: null };
+
+function splitLine(l) { return l.replace(/\r$/, "").split(/,|\t/); }
+
+function parseTriax(text, fname) {
+  // BioComp Triax FlowCell export: metadata header, then "Data Columns:" row
+  // (may carry sample names), then "Sample, Source, Position(mm), ..." row, then data.
+  const lines = text.split(/\r\n|\n|\r/);
+  let iCols = -1, iHead = -1;
+  for (let i = 0; i < Math.min(lines.length, 200); i++) {
+    if (/^Data Columns:/i.test(lines[i])) iCols = i;
+    if (/^Sample\s*,\s*Source\s*,\s*Position/i.test(lines[i])) { iHead = i; break; }
+  }
+  if (iHead < 0) return null;
+  const nameCells = iCols >= 0 ? splitLine(lines[iCols]) : [];
+  const headCells = splitLine(lines[iHead]);
+  // y columns start at index 3; skip sparse fraction columns and empty columns
+  const base = fname.replace(/\.(csv|txt)$/i, "");
+  const cols = [];
+  for (let c = 3; c < headCells.length; c++) {
+    const h = (headCells[c] || "").trim();
+    if (/fraction/i.test(h)) continue;
+    let nm = (nameCells[c] || "").trim();
+    if (!nm && /absor/i.test(h)) nm = "";            // single-trace export: name from file
+    cols.push({ idx: c, name: nm });
+  }
+  const xs = [], data = cols.map(() => []);
+  for (let i = iHead + 1; i < lines.length; i++) {
+    const cells = splitLine(lines[i]);
+    const x = parseFloat(cells[2]);
+    if (!isFinite(x)) continue;
+    xs.push(x);
+    cols.forEach((c, k) => {
+      const v = parseFloat(cells[c.idx]);
+      data[k].push(isFinite(v) ? v : NaN);
+    });
+  }
+  const out = [];
+  const seen = new Set();
+  cols.forEach((c, k) => {
+    const y = data[k];
+    const nOK = y.filter(Number.isFinite).length;
+    if (nOK < 10) return;                               // empty/junk column
+    const key = y.slice(0, 25).map(v => (Number.isFinite(v) ? v.toFixed(6) : "NA")).join("|");
+    if (seen.has(key)) return;                          // exact duplicate column (e.g. trailing KO MG 1)
+    seen.add(key);
+    // per-column trailing NaNs (shorter pasted traces) are trimmed with their x
+    const X = [], Y = [];
+    for (let j = 0; j < xs.length; j++) if (Number.isFinite(y[j])) { X.push(xs[j]); Y.push(y[j]); }
+    out.push({ name: c.name || (out.length ? base + " col" + (k + 1) : base), x: X, y: Y });
+  });
+  return out.length ? { traces: out, multi: out.length > 1 } : null;
+}
+
+function parseXY(text, fname) {
+  // headerless two-column x/y (QAPro-style), tab/comma/space separated, BOM tolerated
+  const lines = text.replace(/^﻿/, "").split(/\r\n|\n|\r/);
+  const X = [], Y = [];
+  for (const l of lines) {
+    const cells = l.trim().split(/[\s,;\t]+/);
+    if (cells.length < 2) continue;
+    const x = parseFloat(cells[0]), y = parseFloat(cells[1]);
+    if (isFinite(x) && isFinite(y)) { X.push(x); Y.push(y); }
+  }
+  if (X.length < 10) return null;
+  return { traces: [{ name: fname.replace(/\.(csv|txt)$/i, ""), x: X, y: Y }], multi: false };
+}
+
+function addFileText(text, fname) {
+  const parsed = parseTriax(text, fname) || parseXY(text, fname);
+  const warnEl = document.getElementById("filewarn");
+  if (!parsed) { warnEl.textContent += " Could not parse " + fname + " (unknown format)."; return; }
+  if (parsed.multi)
+    warnEl.textContent = "Note: " + fname + " is a multi-sample paste-up — all samples sit on the first " +
+      "sample's position grid (can be ~0.1–0.5 mm off). Prefer the single-trace exports where available.";
+  for (const t of parsed.traces) {
+    t.visible = true;
+    t.color = COLORS[traces.length % COLORS.length];
+    t.file = fname;
+    traces.push(t);
+  }
+  if (bounds.m1 === null) defaultBounds();
+  renderTraceList(); render();
+}
+
+function defaultBounds() {
+  const xmax = Math.max(...traces.map(t => t.x[t.x.length - 1]));
+  bounds.m1 = +(xmax * 0.30).toFixed(1);
+  bounds.m2 = +(xmax * 0.42).toFixed(1);
+  bounds.p3 = +(xmax * 0.95).toFixed(1);
+  ["m1","m2","p3"].forEach(k => document.getElementById(k).value = bounds[k]);
+}
+
+/* ---------------- math ---------------- */
+function interp(t, x) {                      // linear interpolation of trace at x
+  const X = t.x, Y = t.y;
+  if (x <= X[0]) return Y[0];
+  if (x >= X[X.length-1]) return Y[Y.length-1];
+  let lo = 0, hi = X.length - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; (X[m] <= x) ? lo = m : hi = m; }
+  const f = (x - X[lo]) / (X[hi] - X[lo]);
+  return Y[lo] + f * (Y[hi] - Y[lo]);
+}
+
+function baselineFn(t, mode) {
+  const { m1, p3 } = bounds;
+  if (mode === "none") return () => 0;
+  if (mode === "min") {
+    let mn = Infinity;
+    for (let i = 0; i < t.x.length; i++)
+      if (t.x[i] >= m1 && t.x[i] <= p3 && t.y[i] < mn) mn = t.y[i];
+    if (!isFinite(mn)) mn = 0;
+    return () => mn;
+  }
+  // chord: straight line between the curve values at m1 and p3
+  const y1 = interp(t, m1), y2 = interp(t, p3);
+  return (x) => y1 + (x - m1) / (p3 - m1) * (y2 - y1);
+}
+
+function aucRegion(t, a, b, bl) {
+  // trapezoid over [a,b] on the baseline-corrected curve, with exact edge interpolation
+  const X = [], Y = [];
+  X.push(a); Y.push(interp(t, a) - bl(a));
+  for (let i = 0; i < t.x.length; i++)
+    if (t.x[i] > a && t.x[i] < b) { X.push(t.x[i]); Y.push(t.y[i] - bl(t.x[i])); }
+  X.push(b); Y.push(interp(t, b) - bl(b));
+  let s = 0;
+  for (let i = 1; i < X.length; i++) s += (X[i] - X[i-1]) * (Y[i] + Y[i-1]) / 2;
+  return s;
+}
+
+function computeResults() {
+  const mode = document.getElementById("bmode").value;
+  return traces.filter(t => t.visible).map(t => {
+    const bl = baselineFn(t, mode);
+    const am = aucRegion(t, bounds.m1, bounds.m2, bl);
+    const ap = aucRegion(t, bounds.m2, bounds.p3, bl);
+    // a trace that does not span the regions would be silently flat-extrapolated
+    const covered = t.x[0] <= bounds.m1 + 0.2 && t.x[t.x.length - 1] >= bounds.p3 - 0.2;
+    return { name: t.name + (covered ? "" : " ⚠ trace does not cover regions"),
+             color: t.color, aucM: am, aucP: ap,
+             mp: ap !== 0 ? am / ap : NaN, pm: am !== 0 ? ap / am : NaN,
+             bl: mode === "none" ? "—" : (mode === "min" ? bl(0).toFixed(4) : "chord") };
+  });
+}
+
+/* ---------------- chart ---------------- */
+const W = 1100, H = 460, ML = 58, MR = 16, MT = 14, MB = 40;
+let dragKey = null;
+
+function render() {
+  const wrap = document.getElementById("chartwrap");
+  const vis = traces.filter(t => t.visible);
+  if (!vis.length) { wrap.innerHTML = ""; renderTable(); return; }
+  const xmin = Math.min(...vis.map(t => t.x[0]));
+  const xmax = Math.max(...vis.map(t => t.x[t.x.length - 1]));
+  const crop = document.getElementById("cropy").checked;
+  let ymax = 0, ymin = 0;
+  for (const t of vis) for (let i = 0; i < t.x.length; i++) {
+    if (crop && t.x[i] < 3) continue;
+    if (t.y[i] > ymax) ymax = t.y[i];
+    if (t.y[i] < ymin) ymin = t.y[i];
+  }
+  ymax *= 1.06; ymin = Math.min(0, ymin);
+  const sx = x => ML + (x - xmin) / (xmax - xmin) * (W - ML - MR);
+  const sy = y => MT + (1 - (y - ymin) / (ymax - ymin)) * (H - MT - MB);
+
+  let s = `<svg viewBox="0 0 ${W} ${H}" id="chart">`;
+  // region shading
+  s += `<rect x="${sx(bounds.m1)}" y="${MT}" width="${Math.max(0, sx(bounds.m2)-sx(bounds.m1))}" height="${H-MT-MB}" fill="#377eb8" opacity="0.07"/>`;
+  s += `<rect x="${sx(bounds.m2)}" y="${MT}" width="${Math.max(0, sx(bounds.p3)-sx(bounds.m2))}" height="${H-MT-MB}" fill="#e6550d" opacity="0.07"/>`;
+  // axes + ticks
+  s += `<line x1="${ML}" y1="${sy(ymin)}" x2="${W-MR}" y2="${sy(ymin)}" stroke="#888"/>`;
+  s += `<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${H-MB}" stroke="#888"/>`;
+  const xt = niceTicks(xmin, xmax, 8), yt = niceTicks(ymin, ymax, 6);
+  for (const v of xt) s += `<line x1="${sx(v)}" y1="${H-MB}" x2="${sx(v)}" y2="${H-MB+5}" stroke="#888"/>` +
+    `<text x="${sx(v)}" y="${H-MB+18}" font-size="11" text-anchor="middle" fill="#555">${v}</text>`;
+  for (const v of yt) s += `<line x1="${ML-5}" y1="${sy(v)}" x2="${ML}" y2="${sy(v)}" stroke="#888"/>` +
+    `<text x="${ML-8}" y="${sy(v)+4}" font-size="11" text-anchor="end" fill="#555">${+v.toFixed(3)}</text>`;
+  s += `<text x="${(ML+W-MR)/2}" y="${H-6}" font-size="12" text-anchor="middle" fill="#333">Position (mm)</text>`;
+  s += `<text transform="translate(14 ${(MT+H-MB)/2}) rotate(-90)" font-size="12" text-anchor="middle" fill="#333">OD 260 nm</text>`;
+  // traces
+  for (const t of vis) {
+    let d = "";
+    for (let i = 0; i < t.x.length; i++) {
+      const yy = Math.max(ymin, Math.min(ymax, t.y[i]));
+      d += (i ? "L" : "M") + sx(t.x[i]).toFixed(1) + " " + sy(yy).toFixed(1);
+    }
+    s += `<path d="${d}" fill="none" stroke="${t.color}" stroke-width="1.4" opacity="0.9"/>`;
+  }
+  // boundary lines with drag handles
+  const BL = [["m1", "#377eb8", "mono ▸"], ["m2", "#555", "◂ mono | poly ▸"], ["p3", "#e6550d", "◂ poly"]];
+  for (const [k, col, lab] of BL) {
+    const px = sx(bounds[k]);
+    s += `<line class="bl" data-k="${k}" x1="${px}" y1="${MT}" x2="${px}" y2="${H-MB}" stroke="${col}" stroke-width="2" stroke-dasharray="5 3"/>`;
+    s += `<rect class="bl" data-k="${k}" x="${px-6}" y="${MT}" width="12" height="${H-MT-MB}" fill="transparent"/>`;
+    s += `<text x="${px+4}" y="${MT+12}" font-size="10.5" fill="${col}">${lab} ${bounds[k].toFixed(1)}</text>`;
+  }
+  s += `</svg>`;
+  wrap.innerHTML = s;
+
+  const svg = document.getElementById("chart");
+  const toX = evt => {
+    const r = svg.getBoundingClientRect();
+    const px = (evt.clientX - r.left) / r.width * W;
+    return xmin + (px - ML) / (W - ML - MR) * (xmax - xmin);
+  };
+  svg.addEventListener("pointerdown", e => {
+    const k = e.target.dataset && e.target.dataset.k;
+    if (k) { dragKey = k; svg.setPointerCapture(e.pointerId); }
+  });
+  svg.addEventListener("pointermove", e => {
+    if (!dragKey) return;
+    let v = Math.max(xmin, Math.min(xmax, toX(e)));
+    if (dragKey === "m1") v = Math.min(v, bounds.m2 - 0.5);
+    if (dragKey === "m2") v = Math.max(Math.min(v, bounds.p3 - 0.5), bounds.m1 + 0.5);
+    if (dragKey === "p3") v = Math.max(v, bounds.m2 + 0.5);
+    bounds[dragKey] = +v.toFixed(1);
+    document.getElementById(dragKey).value = bounds[dragKey];
+    render();
+  });
+  svg.addEventListener("pointerup", () => dragKey = null);
+  renderTable();
+}
+
+function niceTicks(a, b, n) {
+  const span = b - a, step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 5, 10].map(m => m * mag).find(s => span / s <= n) || 10 * mag;
+  const out = []; for (let v = Math.ceil(a / step) * step; v <= b + 1e-9; v += step) out.push(+v.toFixed(6));
+  return out;
+}
+
+/* ---------------- UI ---------------- */
+function renderTraceList() {
+  document.getElementById("tracelist").innerHTML = traces.map((t, i) =>
+    `<label><input type="checkbox" data-i="${i}" ${t.visible ? "checked" : ""}>` +
+    `<span class="swatch" style="background:${t.color}"></span>${esc(t.name)}` +
+    `<span style="color:#99a">(${t.x.length} pts)</span></label>`).join("");
+  document.querySelectorAll("#tracelist input").forEach(cb =>
+    cb.addEventListener("change", e => { traces[+e.target.dataset.i].visible = e.target.checked; render(); }));
+}
+
+function renderTable() {
+  const rows = computeResults();
+  document.querySelector("#results tbody").innerHTML = rows.map(r =>
+    `<tr><td><span class="swatch" style="background:${r.color};vertical-align:-2px"></span> ${esc(r.name)}</td>` +
+    `<td>${r.aucM.toFixed(3)}</td><td>${r.aucP.toFixed(3)}</td>` +
+    `<td class="ratio">${r.mp.toFixed(3)}</td><td>${r.pm.toFixed(3)}</td><td>${r.bl}</td></tr>`).join("");
+}
+
+function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+
+document.getElementById("dl").addEventListener("click", () => {
+  const rows = computeResults();
+  const head = "sample,auc_monosome,auc_polysomes,mono_over_poly,poly_over_mono," +
+               "mono_from_mm,mono_to_mm,poly_to_mm,baseline_mode\n";
+  const mode = document.getElementById("bmode").value;
+  const body = rows.map(r => [JSON.stringify(r.name), r.aucM.toFixed(5), r.aucP.toFixed(5),
+    r.mp.toFixed(5), r.pm.toFixed(5), bounds.m1, bounds.m2, bounds.p3, mode].join(",")).join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([head + body], { type: "text/csv" }));
+  a.download = "polysome_auc_results.csv";
+  a.click();
+});
+
+["m1","m2","p3"].forEach(k => document.getElementById(k).addEventListener("change", e => {
+  const v = parseFloat(e.target.value);
+  if (isFinite(v)) { bounds[k] = v; render(); }
+}));
+document.getElementById("bmode").addEventListener("change", render);
+document.getElementById("cropy").addEventListener("change", render);
+
+const drop = document.getElementById("drop"), finput = document.getElementById("finput");
+drop.addEventListener("click", () => finput.click());
+finput.addEventListener("change", () => loadFiles(finput.files));
+drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("hover"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("hover"));
+drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("hover"); loadFiles(e.dataTransfer.files); });
+function loadFiles(list) {
+  for (const f of list) {
+    const rd = new FileReader();
+    rd.onload = () => addFileText(rd.result, f.name);
+    rd.readAsText(f);
+  }
+}
+
+// tiny hook so the tool can be driven for automated testing (harmless in normal use)
+window.__pav = { addFileText, setBounds: (a,b,c) => { bounds.m1=a; bounds.m2=b; bounds.p3=c;
+  ["m1","m2","p3"].forEach((k,i)=>document.getElementById(k).value=[a,b,c][i]); render(); },
+  results: computeResults, traces: () => traces };
+</script>
+</body>
+</html>
