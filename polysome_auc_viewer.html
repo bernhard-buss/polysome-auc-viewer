@@ -51,6 +51,7 @@
   </div>
   <div class="traces" id="tracelist"></div>
   <div class="warn" id="filewarn"></div>
+  <div style="margin-top:8px"><button id="clearall">Clear all loaded files</button></div>
 </div>
 
 <div class="panel">
@@ -71,7 +72,7 @@
       </select></label>
     </div>
     <div class="grp"><label><input type="checkbox" id="cropy" checked> fit y-axis to the mono/poly regions (display only)</label></div>
-    <div class="grp"><label><input type="checkbox" id="alignx"> align traces at the main peak (per-run x-shift)</label></div>
+    <div class="grp"><label><input type="checkbox" id="alignx"> align traces at the monosome peak (per-run x-shift)</label></div>
   </div>
   <div id="chartwrap"></div>
   <div class="legendline">Drag the vertical lines to set regions:
@@ -84,7 +85,12 @@
   <table id="results"><thead>
     <tr><th data-s="name">Sample</th><th data-s="aucM">AUC monosome</th><th data-s="aucP">AUC polysomes</th><th data-s="mp">Mono / Poly</th><th data-s="pm">Poly / Mono</th><th data-s="off">x-shift (mm)</th><th data-s="blv">Baseline</th></tr>
   </thead><tbody></tbody></table>
-  <div style="margin-top:10px"><button id="dl">Download results as CSV</button></div>
+  <div style="margin-top:10px">
+    <button id="dl">Download results as CSV</button>
+    <button id="dlx">Export to Excel (.xlsx)</button>
+    <span class="note" style="margin-left:8px">Excel export: a Summary tab (settings + all AUCs/ratios) plus one
+    tab per sample with the trace data and a native Excel chart.</span>
+  </div>
   <div class="note">AUC = trapezoidal integral of baseline-corrected OD over the region (units: OD·mm).
     The ratio is unitless and independent of loading and path length as long as both regions come from the same trace.
     Method: baseline per trace by the rule chosen above; identical region boundaries for every trace.</div>
@@ -104,11 +110,13 @@
     The duplicated readings around 0&nbsp;mm are an instrument quirk (position reset at meniscus detection);
     keep the monosome start well above that region. The “fit y-axis” toggle only zooms the display to the
     mono/poly regions — it never changes the numbers.
-    <b>Align traces at the main peak</b>: runs from the same session can be offset against each other by
+    <b>Align traces at the monosome peak</b>: runs from the same session can be offset against each other by
     2–4&nbsp;mm (meniscus-detection variance), which slides peaks across fixed region boundaries and can make
-    replicates disagree. This option shifts each trace so its global-maximum peak sits at the shared median
+    replicates disagree. This option shifts each trace so its tallest peak <em>near the monosome window</em>
+    (±3&nbsp;mm; the artificial instrument spike at the gradient top is ignored) sits at the shared median
     position (the applied shift is reported per sample and in the CSV); regions are then applied to the
-    aligned positions. Turn it on whenever the overlaid peaks visibly do not line up.</div>
+    aligned positions. Place the monosome window roughly over the 80S peak first, then turn this on
+    whenever the overlaid peaks visibly do not line up.</div>
 </div>
 
 <script>
@@ -120,14 +128,23 @@ let traces = [];           // {name, x[], y[], visible, color, file, off}
 let bounds = { m1: null, m2: null, p3: null };
 let sortState = { key: "name", dir: 1 };
 
-// per-run x-alignment: offset so every trace's main peak (its global OD maximum,
-// in these gradients the sharp sub-ribosomal spike) sits at the shared median
-// position. Applied to display AND integration when the checkbox is on.
+// per-run x-alignment: offset so every trace's monosome (80S) peak — the OD
+// maximum inside the monosome window, padded by 3 mm to tolerate inter-run
+// drift — sits at the shared median position. Deliberately NOT the global
+// maximum: that is the artificial sub-ribosomal/instrument spike at the
+// gradient top. Applied to display AND integration when the checkbox is on.
 function computeAlign() {
   const on = document.getElementById("alignx").checked;
   const vis = traces.filter(t => t.visible);
-  if (!on || vis.length < 2) { traces.forEach(t => t.off = 0); return; }
-  const apex = t => t.x[t.y.indexOf(Math.max(...t.y))];
+  if (!on || vis.length < 2 || bounds.m1 == null) { traces.forEach(t => t.off = 0); return; }
+  const lo = bounds.m1 - 3, hi = bounds.m2 + 3;
+  const apex = t => {
+    let bi = -1, bv = -Infinity;
+    for (let i = 0; i < t.x.length; i++)
+      if (t.x[i] >= lo && t.x[i] <= hi && t.y[i] > bv) { bv = t.y[i]; bi = i; }
+    if (bi < 0) bi = t.y.indexOf(Math.max(...t.y));   // trace misses the window entirely
+    return t.x[bi];
+  };
   const as = vis.map(apex).sort((a, b) => a - b);
   const ref = as[(as.length - 1) >> 1];
   traces.forEach(t => t.off = t.visible ? +(apex(t) - ref).toFixed(2) : 0);
@@ -435,6 +452,14 @@ document.getElementById("dl").addEventListener("click", () => {
 document.getElementById("bmode").addEventListener("change", render);
 document.getElementById("cropy").addEventListener("change", render);
 document.getElementById("alignx").addEventListener("change", render);
+document.getElementById("clearall").addEventListener("click", () => {
+  traces.length = 0;
+  bounds = { m1: null, m2: null, p3: null };
+  ["m1","m2","p3"].forEach(k => document.getElementById(k).value = "");
+  document.getElementById("finput").value = "";
+  document.getElementById("filewarn").innerHTML = "";
+  renderTraceList(); render();
+});
 
 const drop = document.getElementById("drop"), finput = document.getElementById("finput");
 drop.addEventListener("click", () => finput.click());
@@ -450,10 +475,185 @@ function loadFiles(list) {
   }
 }
 
+/* ---------------- xlsx export (hand-rolled, store-only zip, no dependencies) ---------------- */
+const CRC_T = (() => { const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0; } return t; })();
+function crc32(u8) { let c = 0xFFFFFFFF;
+  for (let i = 0; i < u8.length; i++) c = CRC_T[(c ^ u8[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0; }
+
+function zipStore(files) {           // files: [{name, text}] -> Uint8Array (no compression)
+  const enc = new TextEncoder(), parts = [], central = [];
+  let offset = 0;
+  const u16 = v => [v & 255, (v >> 8) & 255];
+  const u32 = v => [v & 255, (v >> 8) & 255, (v >> 16) & 255, (v >>> 24) & 255];
+  for (const f of files) {
+    const name = enc.encode(f.name), data = enc.encode(f.text), crc = crc32(data);
+    const head = [0x50,0x4b,0x03,0x04, ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
+                  ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length), ...u16(0)];
+    parts.push(new Uint8Array(head), name, data);
+    central.push(new Uint8Array([0x50,0x4b,0x01,0x02, ...u16(20), ...u16(20), ...u16(0), ...u16(0),
+      ...u16(0), ...u16(0), ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length),
+      ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offset)]), name);
+    offset += head.length + name.length + data.length;
+  }
+  let cdSize = 0; for (let i = 0; i < central.length; i += 2) cdSize += central[i].length + central[i+1].length;
+  const end = new Uint8Array([0x50,0x4b,0x05,0x06, ...u16(0), ...u16(0),
+    ...u16(files.length), ...u16(files.length), ...u32(cdSize), ...u32(offset), ...u16(0)]);
+  const total = offset + cdSize + end.length, out = new Uint8Array(total);
+  let p = 0;
+  for (const a of parts) { out.set(a, p); p += a.length; }
+  for (const a of central) { out.set(a, p); p += a.length; }
+  out.set(end, p);
+  return out;
+}
+
+const XA = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"';
+const XR = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+function xesc(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+  .replace(/"/g,"&quot;"); }
+function sheetSafe(s, used) {
+  let n = s.replace(/[\[\]:*?\/\\]/g, " ").trim().slice(0, 28) || "Sheet";
+  let out = n, k = 2;
+  while (used.has(out.toLowerCase())) out = n.slice(0, 25) + " " + (k++);
+  used.add(out.toLowerCase());
+  return out;
+}
+function cellN(r, c, v) { return `<c r="${colL(c)}${r}"><v>${v}</v></c>`; }
+function cellS(r, c, v) { return `<c r="${colL(c)}${r}" t="inlineStr"><is><t>${xesc(v)}</t></is></c>`; }
+function colL(c) { let s = ""; while (c > 0) { const m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = (c - 1 - m) / 26; } return s; }
+
+function chartXml(sheet, n, name) {
+  const f = r => `&apos;${sheet.replace(/&/g,"&amp;").replace(/'/g,"''")}&apos;!${r}`;
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" ${XA} ${XR}>
+<c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>${xesc(name)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>
+<c:autoTitleDeleted val="0"/><c:plotArea><c:layout/>
+<c:scatterChart><c:scatterStyle val="lineMarker"/><c:varyColors val="0"/>
+<c:ser><c:idx val="0"/><c:order val="0"/>
+<c:tx><c:strRef><c:f>${f("$B$1")}</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>${xesc(name)}</c:v></c:pt></c:strCache></c:strRef></c:tx>
+<c:spPr><a:ln w="12700"><a:solidFill><a:srgbClr val="00588B"/></a:solidFill></a:ln></c:spPr>
+<c:marker><c:symbol val="none"/></c:marker>
+<c:xVal><c:numRef><c:f>${f("$A$2:$A$" + (n + 1))}</c:f></c:numRef></c:xVal>
+<c:yVal><c:numRef><c:f>${f("$B$2:$B$" + (n + 1))}</c:f></c:numRef></c:yVal>
+<c:smooth val="0"/></c:ser>
+<c:axId val="111111111"/><c:axId val="222222222"/></c:scatterChart>
+<c:valAx><c:axId val="111111111"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/>
+<c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>Position (mm)</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>
+<c:crossAx val="222222222"/></c:valAx>
+<c:valAx><c:axId val="222222222"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/>
+<c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>OD 260 nm</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>
+<c:crossAx val="111111111"/></c:valAx>
+</c:plotArea><c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart></c:chartSpace>`;
+}
+
+function drawingXml() {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" ${XA}>
+<xdr:twoCellAnchor><xdr:from><xdr:col>4</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>
+<xdr:to><xdr:col>15</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>24</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
+<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart 1"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr>
+<xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>
+<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">
+<c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" ${XR} r:id="rId1"/>
+</a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>`;
+}
+
+function buildXlsx() {
+  computeAlign();
+  const vis = traces.filter(t => t.visible);
+  const rows = computeResults();
+  const mode = document.getElementById("bmode").value;
+  const used = new Set(["summary"]);
+  const sheets = vis.map((t, i) => ({ t, name: sheetSafe(t.name, used) }));
+
+  // Summary sheet
+  const sHead = ["Sample","AUC monosome","AUC polysomes","Mono / Poly","Poly / Mono","x-shift (mm)","Baseline"];
+  let sm = `<row r="1">` + sHead.map((h, c) => cellS(1, c + 1, h)).join("") + `</row>`;
+  rows.forEach((r, i) => {
+    const rn = i + 2;
+    sm += `<row r="${rn}">` + cellS(rn, 1, r.name) + cellN(rn, 2, r.aucM.toFixed(5)) +
+      cellN(rn, 3, r.aucP.toFixed(5)) + cellN(rn, 4, r.mp.toFixed(5)) + cellN(rn, 5, r.pm.toFixed(5)) +
+      cellN(rn, 6, (r.off || 0).toFixed(2)) + cellS(rn, 7, r.bl) + `</row>`;
+  });
+  const setRow0 = rows.length + 3;
+  const settings = [["Monosome from (mm)", bounds.m1], ["Monosome to / poly from (mm)", bounds.m2],
+    ["Polysomes to (mm)", bounds.p3], ["Baseline mode", mode],
+    ["Peak alignment", document.getElementById("alignx").checked ? "on" : "off"],
+    ["Exported", new Date().toISOString()], ["Tool", "polysome_auc_viewer.html"]];
+  settings.forEach((kv, i) => {
+    const rn = setRow0 + i;
+    sm += `<row r="${rn}">` + cellS(rn, 1, kv[0]) +
+      (typeof kv[1] === "number" ? cellN(rn, 2, kv[1]) : cellS(rn, 2, kv[1])) + `</row>`;
+  });
+  const sheetXml = data => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ${XR}><sheetData>${data.rows}</sheetData>${data.drawing || ""}</worksheet>`;
+
+  const files = [];
+  const ct = [`<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>`,
+              `<Default Extension="xml" ContentType="application/xml"/>`,
+              `<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>`,
+              `<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>`,
+              `<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`];
+  files.push({ name: "_rels/.rels", text: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>` });
+  files.push({ name: "xl/styles.xml", text: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
+<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
+<borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>` });
+  files.push({ name: "xl/worksheets/sheet1.xml", text: sheetXml({ rows: sm }) });
+
+  let wbSheets = `<sheet name="Summary" sheetId="1" r:id="rId1"/>`;
+  let wbRels = `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>`;
+  sheets.forEach((sh, i) => {
+    const sn = i + 2, t = sh.t, n = t.x.length;
+    let rws = `<row r="1">` + cellS(1, 1, "Position (mm)") + cellS(1, 2, t.name) + `</row>`;
+    for (let j = 0; j < n; j++)
+      rws += `<row r="${j + 2}">` + cellN(j + 2, 1, px_(t, j).toFixed(4)) + cellN(j + 2, 2, t.y[j]) + `</row>`;
+    files.push({ name: `xl/worksheets/sheet${sn}.xml`,
+                 text: sheetXml({ rows: rws, drawing: `<drawing r:id="rId1"/>` }) });
+    files.push({ name: `xl/worksheets/_rels/sheet${sn}.xml.rels`, text: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing${sn}.xml"/></Relationships>` });
+    files.push({ name: `xl/drawings/drawing${sn}.xml`, text: drawingXml() });
+    files.push({ name: `xl/drawings/_rels/drawing${sn}.xml.rels`, text: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart${sn}.xml"/></Relationships>` });
+    files.push({ name: `xl/charts/chart${sn}.xml`, text: chartXml(sh.name, n, t.name) });
+    ct.push(`<Override PartName="/xl/worksheets/sheet${sn}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`);
+    ct.push(`<Override PartName="/xl/drawings/drawing${sn}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>`);
+    ct.push(`<Override PartName="/xl/charts/chart${sn}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>`);
+    wbSheets += `<sheet name="${xesc(sh.name)}" sheetId="${sn}" r:id="rId${sn}"/>`;
+    wbRels += `<Relationship Id="rId${sn}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${sn}.xml"/>`;
+  });
+  const rStyles = sheets.length + 2;
+  wbRels += `<Relationship Id="rId${rStyles}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>`;
+  files.push({ name: "xl/workbook.xml", text: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ${XR}><sheets>${wbSheets}</sheets></workbook>` });
+  files.push({ name: "xl/_rels/workbook.xml.rels", text: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${wbRels}</Relationships>` });
+  files.unshift({ name: "[Content_Types].xml", text: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">${ct.join("")}</Types>` });
+  return zipStore(files);
+}
+
+document.getElementById("dlx").addEventListener("click", () => {
+  const u8 = buildXlsx();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([u8], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+  a.download = "polysome_traces.xlsx";
+  a.click();
+});
+
 // tiny hook so the tool can be driven for automated testing (harmless in normal use)
 window.__pav = { addFileText, setBounds: (a,b,c) => { bounds.m1=a; bounds.m2=b; bounds.p3=c;
   ["m1","m2","p3"].forEach((k,i)=>document.getElementById(k).value=[a,b,c][i]); render(); },
-  results: computeResults, traces: () => traces };
+  results: computeResults, traces: () => traces, buildXlsx };
 </script>
 </body>
 </html>
