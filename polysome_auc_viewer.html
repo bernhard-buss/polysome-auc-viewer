@@ -88,8 +88,9 @@
   <div style="margin-top:10px">
     <button id="dl">Download results as CSV</button>
     <button id="dlx">Export to Excel (.xlsx)</button>
-    <span class="note" style="margin-left:8px">Excel export: a Summary tab (settings + all AUCs/ratios) plus one
-    tab per sample with the trace data and a native Excel chart.</span>
+    <span class="note" style="margin-left:8px">Excel export: a Summary tab (settings + all AUCs/ratios + a combined
+    chart of every trace, viewer colors) plus one tab per sample with the trace data and a native Excel chart.
+    Positions are exported as displayed, i.e. aligned when alignment is on.</span>
   </div>
   <div class="note">AUC = trapezoidal integral of baseline-corrected OD over the region (units: OD·mm).
     The ratio is unitless and independent of loading and path length as long as both regions come from the same trace.
@@ -525,20 +526,26 @@ function cellN(r, c, v) { return `<c r="${colL(c)}${r}"><v>${v}</v></c>`; }
 function cellS(r, c, v) { return `<c r="${colL(c)}${r}" t="inlineStr"><is><t>${xesc(v)}</t></is></c>`; }
 function colL(c) { let s = ""; while (c > 0) { const m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = (c - 1 - m) / 26; } return s; }
 
-function chartXml(sheet, n, name) {
+const hexCol = c => (c || "#00588B").replace("#", "").toUpperCase();
+
+function serXml(sheet, idx, name, n, color) {
   const f = r => `&apos;${sheet.replace(/&/g,"&amp;").replace(/'/g,"''")}&apos;!${r}`;
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" ${XA} ${XR}>
-<c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>${xesc(name)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>
-<c:autoTitleDeleted val="0"/><c:plotArea><c:layout/>
-<c:scatterChart><c:scatterStyle val="lineMarker"/><c:varyColors val="0"/>
-<c:ser><c:idx val="0"/><c:order val="0"/>
+  return `<c:ser><c:idx val="${idx}"/><c:order val="${idx}"/>
 <c:tx><c:strRef><c:f>${f("$B$1")}</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>${xesc(name)}</c:v></c:pt></c:strCache></c:strRef></c:tx>
-<c:spPr><a:ln w="12700"><a:solidFill><a:srgbClr val="00588B"/></a:solidFill></a:ln></c:spPr>
+<c:spPr><a:ln w="12700"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill></a:ln></c:spPr>
 <c:marker><c:symbol val="none"/></c:marker>
 <c:xVal><c:numRef><c:f>${f("$A$2:$A$" + (n + 1))}</c:f></c:numRef></c:xVal>
 <c:yVal><c:numRef><c:f>${f("$B$2:$B$" + (n + 1))}</c:f></c:numRef></c:yVal>
-<c:smooth val="0"/></c:ser>
+<c:smooth val="0"/></c:ser>`;
+}
+
+function chartXml(sers, title, withLegend) {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" ${XA} ${XR}>
+<c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>${xesc(title)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>
+<c:autoTitleDeleted val="0"/><c:plotArea><c:layout/>
+<c:scatterChart><c:scatterStyle val="lineMarker"/><c:varyColors val="0"/>
+${sers}
 <c:axId val="111111111"/><c:axId val="222222222"/></c:scatterChart>
 <c:valAx><c:axId val="111111111"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/>
 <c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>Position (mm)</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>
@@ -546,14 +553,14 @@ function chartXml(sheet, n, name) {
 <c:valAx><c:axId val="222222222"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/>
 <c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>OD 260 nm</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>
 <c:crossAx val="111111111"/></c:valAx>
-</c:plotArea><c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart></c:chartSpace>`;
+</c:plotArea>${withLegend ? '<c:legend><c:legendPos val="b"/><c:overlay val="0"/></c:legend>' : ""}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart></c:chartSpace>`;
 }
 
-function drawingXml() {
+function drawingXml(c1, r1, c2, r2) {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" ${XA}>
-<xdr:twoCellAnchor><xdr:from><xdr:col>4</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>
-<xdr:to><xdr:col>15</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>24</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
+<xdr:twoCellAnchor><xdr:from><xdr:col>${c1}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${r1}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>
+<xdr:to><xdr:col>${c2}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${r2}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
 <xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart 1"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr>
 <xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>
 <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">
@@ -606,7 +613,29 @@ function buildXlsx() {
 <borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
 <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>` });
-  files.push({ name: "xl/worksheets/sheet1.xml", text: sheetXml({ rows: sm }) });
+  // Summary tab: combined chart of every exported trace (aligned positions,
+  // same colors as the viewer), anchored below the settings block
+  if (sheets.length) {
+    const top = rows.length + 11;                       // 0-based row below the settings
+    files.push({ name: "xl/worksheets/sheet1.xml",
+                 text: sheetXml({ rows: sm, drawing: `<drawing r:id="rId1"/>` }) });
+    files.push({ name: "xl/worksheets/_rels/sheet1.xml.rels", text: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>` });
+    files.push({ name: "xl/drawings/drawing1.xml", text: drawingXml(0, top, 13, top + 28) });
+    files.push({ name: "xl/drawings/_rels/drawing1.xml.rels", text: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/></Relationships>` });
+    const allSers = sheets.map((sh, i) =>
+      serXml(sh.name, i, sh.t.name, sh.t.x.length, hexCol(sh.t.color))).join("");
+    const alignedOn = document.getElementById("alignx").checked;
+    files.push({ name: "xl/charts/chart1.xml",
+                 text: chartXml(allSers, alignedOn ? "All traces (aligned at monosome peak)" : "All traces", true) });
+    ct.push(`<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>`);
+    ct.push(`<Override PartName="/xl/charts/chart1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>`);
+  } else {
+    files.push({ name: "xl/worksheets/sheet1.xml", text: sheetXml({ rows: sm }) });
+  }
 
   let wbSheets = `<sheet name="Summary" sheetId="1" r:id="rId1"/>`;
   let wbRels = `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>`;
@@ -620,11 +649,12 @@ function buildXlsx() {
     files.push({ name: `xl/worksheets/_rels/sheet${sn}.xml.rels`, text: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing${sn}.xml"/></Relationships>` });
-    files.push({ name: `xl/drawings/drawing${sn}.xml`, text: drawingXml() });
+    files.push({ name: `xl/drawings/drawing${sn}.xml`, text: drawingXml(4, 1, 15, 24) });
     files.push({ name: `xl/drawings/_rels/drawing${sn}.xml.rels`, text: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart${sn}.xml"/></Relationships>` });
-    files.push({ name: `xl/charts/chart${sn}.xml`, text: chartXml(sh.name, n, t.name) });
+    files.push({ name: `xl/charts/chart${sn}.xml`,
+                 text: chartXml(serXml(sh.name, 0, t.name, n, hexCol(t.color)), t.name, false) });
     ct.push(`<Override PartName="/xl/worksheets/sheet${sn}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`);
     ct.push(`<Override PartName="/xl/drawings/drawing${sn}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>`);
     ct.push(`<Override PartName="/xl/charts/chart${sn}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>`);
