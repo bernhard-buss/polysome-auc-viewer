@@ -56,6 +56,15 @@
   .badge.auto { background: #e6f2ea; color: #2a7a2a; }
   .frow { display: flex; align-items: center; gap: 8px; margin: 4px 0 6px; }
   .frow[hidden] { display: none; }
+  details.prof { padding: 4px 12px 8px; }
+  details.prof summary { cursor: pointer; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; list-style: none; }
+  details.prof summary::-webkit-details-marker { display: none; }
+  details.prof summary::before { content: "▸ "; } details.prof[open] summary::before { content: "▾ "; }
+  .pgrid { display: grid; grid-template-columns: auto auto; gap: 6px 12px; align-items: center; margin-top: 6px; font-size: 12.5px; }
+  .pgrid input[type=number] { width: 62px; padding: 2px 4px; border: 1px solid var(--line); border-radius: 4px; }
+  .ratio .sub2 { display: block; font-size: 10.5px; color: #778; font-weight: 400; white-space: nowrap; }
+  #hover text { font-size: 11px; } .chartlegend text { font-size: 10.5px; }
+  .sessline { font-size: 12px; color: var(--muted); margin-top: 4px; }
   .frow select { padding: 3px 5px; border: 1px solid var(--line); border-radius: 4px; max-width: 300px; }
   .frow .lbl { min-width: 96px; }
   label.chk { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; cursor: pointer; }
@@ -135,11 +144,22 @@
       <label class="chk"><input type="checkbox" id="cropy" checked> fit the y-axis to the regions</label>
       <div class="dim" style="margin-top:6px;max-width:220px">Display only — never changes the numbers.</div>
     </fieldset>
+    <details class="fs prof"><summary>Gradient profile <span class="dim">(advanced)</span><a class="hl" href="#help" data-help="pipeline" title="Help: gradient profile">ⓘ</a></summary>
+      <div class="frow"><span class="lbl">Preset</span><select id="pf_preset"><option value="sw41-10-50">10–50 % sucrose · SW41 (default)</option><option value="custom">custom</option></select></div>
+      <div class="pgrid">
+        <span title="Aligned position given to every sample's 80S peak">80S reference (mm)</span><input type="number" id="pf_ref80" step="0.1">
+        <span title="Landmark search starts here; everything before is the void / free-RNA peak">search from (mm)</span><input type="number" id="pf_lmStart" step="0.5">
+        <span title="The most prominent peak in this raw-position window is taken as the 80S">80S window (mm)</span><span><input type="number" id="pf_w80lo" step="0.5"> <span class="dim">to</span> <input type="number" id="pf_w80hi" step="0.5"></span>
+        <span title="Allowed distance from the 80S to the 60S, and from the 60S to the 40S">subunit step (mm)</span><span><input type="number" id="pf_stepLo" step="0.5"> <span class="dim">to</span> <input type="number" id="pf_stepHi" step="0.5"></span>
+        <span title="The 80S|polysome valley g4 is the minimum inside this offset from the 80S">g4 offset from 80S (mm)</span><span><input type="number" id="pf_g4lo" step="0.5"> <span class="dim">to</span> <input type="number" id="pf_g4hi" step="0.5"></span>
+      </div>
+    </details>
   </div>
   <div id="chartwrap"></div>
   <div id="lmline" class="legendline"></div>
   <div class="legendline">Drag the dashed lines to adjust — <b class="mono">monosome</b>, <b class="poly">polysomes</b>,
-    grey = start of the total AUC. Shaded areas are integrated after baseline subtraction; boundaries apply to every sample.</div>
+    grey = start of the total AUC; boundaries apply to every sample. Hover for values; drag on the background to zoom, double-click to reset.
+    Small ticks in each sample's colour mark its own peaks (top) and valleys (bottom).</div>
 </div>
 
 <div class="panel">
@@ -162,7 +182,12 @@
     <label>contrasts <input type="text" id="contrasts_in" size="44" placeholder="e.g. KO_CON vs PT_CON; KO_MG vs PT_MG"></label>
     <button id="lockbtn">Lock settings</button><span id="lockinfo" class="note"></span>
     <button id="dltidy">Download tidy table (CSV)</button>
+    <span style="border-left:1px solid var(--line);height:20px"></span>
+    <button id="sesssave" title="Save boundaries, settings, profile, sample metadata, contrasts and lock state as a small JSON file (no trace data)">Save session</button>
+    <button id="sessload" title="Restore a saved session; load the same CSV files again, their metadata is re-applied by sample name">Load session</button>
+    <input type="file" id="sessin" accept=".json" style="display:none"><a class="hl" href="#help" data-help="files" title="Help: session files">ⓘ</a>
   </div>
+  <div id="sessline" class="sessline"></div>
   <div id="design" class="note"></div>
   <div id="contrasts"></div>
   <div id="scale"></div>
@@ -184,12 +209,12 @@
   <section data-tab="start">
     <h3>A typical session</h3>
     <ol>
-      <li><b>Load</b> the single-trace instrument exports (one CSV per sample). Add an empty-gradient run if you have one and select it as <b>Blank gradient</b>.</li>
+      <li><b>Load</b> the single-trace instrument exports (one CSV per sample). Add an empty-gradient run if you have one and select it as <b>Blank gradient</b>. Returning to an analysis? <b>Load session</b> first, then the same files.</li>
       <li><b>Check the landmark line</b> under the chart: 40S / 60S / 80S positions, valleys g1–g4, and the pure-offset verdict. If a sample's valleys deviate, its QC flag tells you.</li>
       <li><b>Auto-set boundaries</b> (done automatically on load; press the button again after adding or hiding samples). Drag the lines only if the rule puts one somewhere obviously wrong — and then keep it there for every sample.</li>
       <li>Tick <b>remove spikes</b>; keep the <b>flat — minimum</b> baseline unless you loaded a blank.</li>
       <li>Fill in <b>block</b>, <b>group</b> and (if recorded) <b>loaded A260</b> per sample, type the <b>contrasts</b> you planned, then <b>Lock settings</b>.</li>
-      <li>Read the results table together with its <b>QC</b> column and the <b>sensitivity</b> range; export the tidy table for statistics.</li>
+      <li>Read the results table together with its <b>QC</b> column and the <b>sensitivity</b> range; export the tidy table for statistics and <b>Save session</b> for the notebook.</li>
     </ol>
     <div class="tip">Decide metric, baseline, boundary rule and exclusion criteria <em>before</em> looking at the ratios. The lock stamps a settings hash on every export so later changes are visible.</div>
   </section>
@@ -212,6 +237,8 @@
       <tr><td>g4</td><td>80S | polysomes (minimum in 80S + 6…12 mm)</td><td>monosome end / polysome start</td></tr>
       <tr><td>end</td><td>—</td><td>polysome end: common endpoint of all loaded samples</td></tr></table>
     <p><b>Total AUC</b> starts at the onset of the very first data peak, so it includes the free-RNA peak and excludes only the start artefacts before it.</p>
+    <h3>Gradient profile (advanced)</h3>
+    <p>The landmark search assumes a geometry: where the void ends, where the 80S can be, how far apart the subunit peaks sit, where to look for g4, and the aligned 80S reference. The defaults are for 10–50 % sucrose in an SW41 tube. For a different gradient, adjust them in the <b>Gradient profile</b> group (the preset switches to “custom”); the profile is part of the settings hash and of every export. A QC flag warns when a peak outside the 80S window is more prominent than the chosen 80S — the usual symptom of a wrong window.</p>
     <h3>Pure-offset test</h3>
     <p>If every sample's g1–g3 valleys sit within 1.5 mm of the consensus after alignment, the x-shifts are a pure meniscus-detection offset and the gradients are physically equivalent. A larger deviation means that gradient differs in scale; a single shift cannot align it, and the sample is flagged.</p>
     <h3>Ladder verdict</h3>
@@ -236,7 +263,7 @@
       <tr><td>Total AUC</td><td>area from the onset of the first data peak to the endpoint (OD·mm); compare loading between samples</td></tr>
       <tr><td>Ribosomal AUC</td><td>area from g1 to the endpoint — excludes the free-RNA peak; the safer loading anchor when the first peak exceeds ~3 OD (detector non-linearity)</td></tr>
       <tr><td>AUC monosome / polysomes</td><td>areas of the two regions after baseline subtraction</td></tr>
-      <tr><td>Mono / Poly, Poly / Mono</td><td>the ratios; unitless, loading cancels once the baseline is right</td></tr>
+      <tr><td>Mono / Poly, Poly / Mono</td><td>the ratios; unitless, loading cancels once the baseline is right. Under Mono / Poly: <b>± noise</b> — the 1σ from random noise plus a one-sigma baseline offset (statistical only) — and the <b>min–max</b> over the sensitivity grid under the current baseline (the setting-dependence). Both are in the exports.</td></tr>
       <tr><td>log2 (Poly / Mono)</td><td>the scale on which to compare and average ratios</td></tr>
       <tr><td>x-shift</td><td>alignment shift applied (mm); ⚠ at ≥ 2 mm only as a reminder to check the pure-offset test</td></tr></table>
     <h3>Extended table</h3>
@@ -294,7 +321,9 @@
       <li>Scan date and time are read from the file header and shown next to each sample.</li>
     </ul>
     <h3>Display</h3>
-    <p>“Fit y-axis” only zooms the display to the mono/poly regions; it never changes numbers. Excluded samples stay on the chart, dimmed and dashed.</p>
+    <p>“Fit y-axis” only zooms the display to the mono/poly regions; it never changes numbers. Hover the chart for the position and every sample's OD; drag on the background to zoom into an x-range, double-click to reset. Excluded samples stay on the chart, dimmed and dashed.</p>
+    <h3>Session files</h3>
+    <p><b>Save session</b> writes a small JSON with boundaries, baseline, alignment, profile, blank, contrasts, lock state and every sample's block/group/A260/exclusion — no trace data. <b>Load session</b> restores it; load the same CSV files again and the metadata is re-applied by sample name. The page also autosaves the current state in the browser and restores it on the next visit; <b>Clear all</b> discards that autosave.</p>
     <h3>Exports</h3>
     <table><tr><th>export</th><th>contents</th></tr>
       <tr><td>Results CSV</td><td>one row per sample: all columns of both tables, QC, boundaries, baseline, alignment reference, blank, metadata, settings hash</td></tr>
@@ -314,8 +343,18 @@ const VERSION = "1.0";
 document.getElementById("ver").textContent = "v" + VERSION;
 let traces = [];           // {name, x[], y[], yc[], spikes[], visible, color, file, off}
 let bounds = { t0: null, m1: null, m2: null, p3: null, h: null };
-const REF80 = 32.0;        // aligned position of the 80S peak (mm) — fixed so windows are portable
-const LM_START = 10;       // mm: landmark search starts after the void / sub-ribosomal spike
+// Gradient profile: the geometry the landmark search assumes. Editable in the
+// Profile group (advanced); part of the settings hash and of every export.
+const PROFILES = {
+  "sw41-10-50": { label: "10–50 % sucrose · SW41 (default)", ref80: 32.0, lmStart: 10, w80lo: 22, w80hi: 42, stepLo: 4, stepHi: 9.5, g4lo: 6, g4hi: 12 } };
+let PROF = { ...PROFILES["sw41-10-50"] }, profileName = "sw41-10-50";
+let REF80 = PROF.ref80;    // aligned position of the 80S peak (mm) — fixed so windows are portable
+let LM_START = PROF.lmStart; // mm: landmark search starts after the void / sub-ribosomal spike
+function applyProfile(p, name) {
+  PROF = { ...p }; REF80 = PROF.ref80; LM_START = PROF.lmStart; profileName = name || "custom";
+  for (const k of ["ref80", "lmStart", "w80lo", "w80hi", "stepLo", "stepHi", "g4lo", "g4hi"]) { const el = document.getElementById("pf_" + k); if (el) el.value = PROF[k]; }
+  const sel = document.getElementById("pf_preset"); if (sel) sel.value = profileName;
+}
 let landmarks = null;      // session consensus of the aligned valleys {g1,g2,g3,g4,end,...}
 let autoMode = false;      // boundaries follow the landmarks until the user edits them
 const LM_TOL = 1.5;        // mm: per-sample valley deviation tolerated as "pure offset"
@@ -418,11 +457,13 @@ function detectLandmarks(t) {
   L.prom = Math.max(0.003, 6 * sigma);
   const pk = findPeaks(x, s, L.prom, 1.2, LM_START, x[n - 1] - 1);
   L.peaks = pk;
-  const inWin = pk.filter(p => p.x >= 22 && p.x <= 42);
+  const inWin = pk.filter(p => p.x >= PROF.w80lo && p.x <= PROF.w80hi);
   if (!inWin.length) return;
   const p80 = inWin.reduce((a, b) => b.prom > a.prom ? b : a); L.x80 = p80.x;
+  const alt = pk.filter(p => (p.x < PROF.w80lo || p.x > PROF.w80hi) && p.prom > 1.2 * p80.prom);
+  L.altPeak = alt.length ? alt.reduce((a, b) => b.prom > a.prom ? b : a).x : null;
   const left = pk.filter(p => p.x < p80.x), right = pk.filter(p => p.x > p80.x);
-  const near = (arr, ref) => arr.filter(p => ref - p.x >= 4 && ref - p.x <= 9.5).pop();
+  const near = (arr, ref) => arr.filter(p => ref - p.x >= PROF.stepLo && ref - p.x <= PROF.stepHi).pop();
   const p60 = near(left, p80.x);
   if (p60) { L.x60 = p60.x; const p40 = near(left, p60.x); if (p40) L.x40 = p40.x; }
   L.poly = right.map(p => p.x);
@@ -432,7 +473,7 @@ function detectLandmarks(t) {
   if (L.x40 != null) L.g1 = vmin(Math.max(LM_START, L.x40 - 8), L.x40);
   if (L.x40 != null && L.x60 != null) L.g2 = vmin(L.x40, L.x60);
   L.g3 = L.x60 != null ? vmin(L.x60, L.x80) : vmin(L.x80 - 8, L.x80);
-  L.g4 = vmin(L.x80 + 6, L.x80 + 12);
+  L.g4 = vmin(L.x80 + PROF.g4lo, L.x80 + PROF.g4hi);
   const s68 = L.x60 != null ? L.x80 - L.x60 : NaN;
   if (!L.poly.length) { L.verdict = "unresolved: no peaks after the 80S"; return; }
   const sp = []; let prev = L.x80; for (const p of L.poly) { sp.push(p - prev); prev = p; }
@@ -481,7 +522,7 @@ function computeAlign() {
 }
 function apexFallback(t) {                    // tallest smoothed point in 22-42 mm (raw)
   const s = t.sm || Y_(t); let bi = -1, bv = -Infinity;
-  for (let i = 0; i < t.x.length; i++) if (t.x[i] >= 22 && t.x[i] <= 42 && s[i] > bv) { bv = s[i]; bi = i; }
+  for (let i = 0; i < t.x.length; i++) if (t.x[i] >= PROF.w80lo && t.x[i] <= PROF.w80hi && s[i] > bv) { bv = s[i]; bi = i; }
   return bi < 0 ? REF80 : t.x[bi];
 }
 
@@ -617,6 +658,7 @@ function addFileText(text, fname) {
   for (const t of parsed.traces) {
     t.visible = true;
     t.meta = { block: "1", group: t.name.replace(/[\s_-]*\d+$/, ""), a260: NaN, excl: "" };
+    applyPendingMeta(t);
     t.color = COLORS[traces.length % COLORS.length];
     t.file = fname;
     traces.push(t);
@@ -720,12 +762,23 @@ function computeResults(opts) {
     const xs = [], ss = [];
     for (let i = 0; i < t.x.length; i++) { const xv = px_(t, i); if (xv >= bounds.p3 - 3 && xv <= bounds.p3) { xs.push(xv); ss.push(t.sm[i]); } }
     const slope = slopeFit(xs, ss);
+    // noise-propagated 1-sigma of Mono/Poly: random noise over each window plus a
+    // correlated baseline offset of one sigma (the systematic baseline-model
+    // uncertainty is NOT in here — that is what the sensitivity grid shows)
+    let mpSd = NaN;
+    if (Number.isFinite(t.sigma) && am > 0 && ap > 0) {
+      const dx = dxOf(t), LM = bounds.m2 - bounds.m1, LP = bounds.p3 - bounds.m2;
+      const relNoise = Math.sqrt((t.sigma * Math.sqrt(LM * dx) / am) ** 2 + (t.sigma * Math.sqrt(LP * dx) / ap) ** 2);
+      const relBase = Math.abs(LP / ap - LM / am) * t.sigma;
+      mpSd = (am / ap) * Math.sqrt(relNoise ** 2 + relBase ** 2);
+    }
     const covered = px_(t, 0) <= t0 + 0.2 && px_(t, t.x.length - 1) >= bounds.p3 - 0.2;
     let negOD = false;
     const spikesIn = (t.spikes || []).filter(i => px_(t, i) >= t0 && px_(t, i) <= bounds.p3);
     for (let i = 0; i < t.x.length; i++) if (px_(t, i) >= t0 && px_(t, i) <= bounds.p3 && y[i] < 0) { negOD = true; break; }
     const qc = [];
     if (lm.x80 == null) qc.push("⚠ no 80S peak found — landmarks/alignment unavailable");
+    if (lm.altPeak != null) qc.push(`⚠ a more prominent peak at ${lm.altPeak.toFixed(1)} mm lies outside the 80S window (${PROF.w80lo}–${PROF.w80hi} mm) — check the gradient profile`);
     if (!covered) qc.push("⚠ trace does not cover the regions");
     if (spikesIn.length) {
       const ev = []; for (const i of spikesIn) { const xv = px_(t, i); if (!ev.length || xv - ev[ev.length - 1] > 0.6) ev.push(xv); }
@@ -736,7 +789,7 @@ function computeResults(opts) {
     if (Number.isFinite(t.lmDev) && t.lmDev > LM_TOL) qc.push(`⚠ valleys off by ${t.lmDev.toFixed(1)} mm after alignment — gradient scale differs`);
     if (Number.isFinite(slope) && slope > 0.0003) qc.push(`⚠ still rising at the endpoint (+${(slope * 1000).toFixed(1)} mOD/mm) — heavy polysomes truncated, ratio is a lower bound`);
     return { key: idx, name: t.name, color: t.color, meta: t.meta || {}, scan: t.scan || "", tot, rib, p0y: lm.p0y, aucM: am, aucP: ap, aucH: ah, a40, a60,
-             mp: ap !== 0 ? am / ap : NaN, pm: am !== 0 ? ap / am : NaN,
+             mp: ap !== 0 ? am / ap : NaN, pm: am !== 0 ? ap / am : NaN, mpSd,
              l2: (am > 0 && ap > 0) ? Math.log2(ap / am) : NaN,
              pf: (am + ap) > 0 ? ap / (am + ap) : NaN,
              fs: (rib > 0 && Number.isFinite(a40) && Number.isFinite(a60)) ? (a40 + a60) / rib : NaN,
@@ -761,7 +814,7 @@ function computeResults(opts) {
 
 /* ---------------- chart ---------------- */
 const W = 1100, H = 460, ML = 58, MR = 16, MT = 14, MB = 40;
-let dragKey = null;
+let dragKey = null, xZoom = null, zoomDrag = null, chartScale = null;
 
 function render() {
   const wrap = document.getElementById("chartwrap");
@@ -769,14 +822,16 @@ function render() {
   if (!vis.length) { wrap.innerHTML = ""; renderTable(); return; }
   prepare();
   if (autoMode) autoBounds();
-  const xmin = Math.min(...vis.map(t => px_(t, 0)));
-  const xmax = Math.max(...vis.map(t => px_(t, t.x.length - 1)));
+  const xminD = Math.min(...vis.map(t => px_(t, 0)));
+  const xmaxD = Math.max(...vis.map(t => px_(t, t.x.length - 1)));
+  const xmin = xZoom ? Math.max(xminD, xZoom[0]) : xminD, xmax = xZoom ? Math.min(xmaxD, xZoom[1]) : xmaxD;
   // y-scale: either the full traces, or (default) only the data inside the
   // mono/poly regions, so the huge sub-ribosomal/meniscus peak at the gradient
   // top does not squash the region of interest.
   const crop = document.getElementById("cropy").checked;
   let ymax = 0, ymin = 0;
   for (const t of vis) { const y = Y_(t); for (let i = 0; i < t.x.length; i++) {
+    if (px_(t, i) < xmin || px_(t, i) > xmax) continue;
     if (crop && (px_(t, i) < bounds.m1 || px_(t, i) > bounds.p3)) continue;
     if (y[i] > ymax) ymax = y[i];
     if (y[i] < ymin) ymin = y[i];
@@ -785,8 +840,9 @@ function render() {
   ymax *= 1.1; ymin = Math.min(0, ymin);
   const sx = x => ML + (x - xmin) / (xmax - xmin) * (W - ML - MR);
   const sy = y => MT + (1 - (y - ymin) / (ymax - ymin)) * (H - MT - MB);
+  chartScale = { sx, sy, xmin, xmax, ymin, ymax };
 
-  let s = `<svg viewBox="0 0 ${W} ${H}" id="chart">`;
+  let s = `<svg viewBox="0 0 ${W} ${H}" id="chart"><defs><clipPath id="plotclip"><rect x="${ML}" y="${MT}" width="${W-ML-MR}" height="${H-MT-MB}"/></clipPath></defs>`;
   // region shading
   if (Number.isFinite(bounds.t0))
     s += `<rect x="${sx(bounds.t0)}" y="${MT}" width="${Math.max(0, sx(bounds.m1)-sx(bounds.t0))}" height="${H-MT-MB}" fill="#999" opacity="0.06"/>`;
@@ -807,6 +863,7 @@ function render() {
     s += `<rect x="${sx(bounds.h)}" y="${MT}" width="${Math.max(0, sx(bounds.p3)-sx(bounds.h))}" height="${H-MT-MB}" fill="#984ea3" opacity="0.08"/>`;
   // traces (+ the baseline actually subtracted, dotted, per trace)
   const mode = document.getElementById("bmode").value;
+  s += `<g clip-path="url(#plotclip)">`;
   for (const t of vis) {
     const y = Y_(t);
     let d = "";
@@ -829,6 +886,21 @@ function render() {
     }
   }
   // boundary lines with drag handles
+  // per-sample landmark ticks in the sample's colour: peaks at the top, valleys at the bottom
+  for (const t of vis) if (t.lm && t.lm.x80 != null) {
+    for (const k of ["x40", "x60", "x80"]) if (t.lm[k] != null) { const xv = t.lm[k] - (t.off || 0);
+      s += `<line x1="${sx(xv)}" y1="${MT+20}" x2="${sx(xv)}" y2="${MT+25}" stroke="${t.color}" stroke-width="1" opacity="0.8"/>`; }
+    for (const k of ["g1", "g2", "g3", "g4"]) if (t.lm[k] != null) { const xv = t.lm[k] - (t.off || 0);
+      s += `<line x1="${sx(xv)}" y1="${H-MB-14}" x2="${sx(xv)}" y2="${H-MB-9}" stroke="${t.color}" stroke-width="1" opacity="0.8"/>`; }
+  }
+  s += `</g>`;
+  // legend (top right, inside the plot)
+  { const lw = 150, lh = 6 + 13 * vis.length, lx = W - MR - lw - 4, ly = MT + 4;
+    s += `<g class="chartlegend"><rect x="${lx}" y="${ly}" width="${lw}" height="${lh}" fill="#fff" opacity="0.85" stroke="#ddd"/>`;
+    vis.forEach((t, i) => { const yy = ly + 12 + 13 * i;
+      s += `<line x1="${lx+6}" y1="${yy-3}" x2="${lx+22}" y2="${yy-3}" stroke="${t.color}" stroke-width="2"${t.meta && t.meta.excl ? ' stroke-dasharray="4 3"' : ""}/>` +
+           `<text x="${lx+27}" y="${yy}" fill="#333">${esc(t.name.length > 20 ? t.name.slice(0, 19) + "…" : t.name)}</text>`; });
+    s += `</g>`; }
   // consensus landmark ticks (aligned): 40S / 60S / 80S peaks and the g1..g4 valleys
   if (landmarks) {
     for (const [k, lab] of [["x40", "40S"], ["x60", "60S"], ["x80", "80S"]]) if (landmarks[k] != null)
@@ -846,7 +918,8 @@ function render() {
     s += `<rect class="bl" data-k="${k}" x="${px-6}" y="${MT}" width="12" height="${H-MT-MB}" fill="transparent"/>`;
     s += `<text x="${px+4}" y="${MT+12}" font-size="10.5" fill="${col}">${lab} ${bounds[k].toFixed(1)}</text>`;
   }
-  s += `</svg>`;
+  if (xZoom) s += `<text x="${ML+6}" y="${H-MB-4}" font-size="10.5" fill="#667">zoomed ${xmin.toFixed(1)}–${xmax.toFixed(1)} mm — double-click to reset</text>`;
+  s += `<g id="hover" pointer-events="none"></g></svg>`;
   wrap.innerHTML = s;
 
   const svg = document.getElementById("chart");
@@ -855,12 +928,29 @@ function render() {
     const px = (evt.clientX - r.left) / r.width * W;
     return xmin + (px - ML) / (W - ML - MR) * (xmax - xmin);
   };
+  const hover = document.getElementById("hover");
+  const showHover = (x, sel) => {
+    if (x < xmin || x > xmax) { hover.innerHTML = ""; return; }
+    let h = "";
+    if (sel) h += `<rect x="${sx(Math.min(sel[0], sel[1]))}" y="${MT}" width="${Math.abs(sx(sel[1]) - sx(sel[0]))}" height="${H-MT-MB}" fill="#00588b" opacity="0.08"/>`;
+    h += `<line x1="${sx(x)}" y1="${MT}" x2="${sx(x)}" y2="${H-MB}" stroke="#999" stroke-dasharray="2 2"/>`;
+    const lines = [`${x.toFixed(1)} mm`].concat(vis.map(t => `${t.name.length > 16 ? t.name.slice(0, 15) + "…" : t.name}: ${interp(t, x).toFixed(4)}`));
+    const bw = 150, bh = 8 + 13 * lines.length, right = sx(x) + 12 + bw < W - MR, bx = right ? sx(x) + 12 : sx(x) - 12 - bw, by = MT + 30;
+    h += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="#fff" opacity="0.92" stroke="#ccc"/>`;
+    lines.forEach((l, i) => { const col = i ? vis[i - 1].color : "#333";
+      h += `<text x="${bx+6}" y="${by+13+13*i}" fill="${col}"${i ? "" : ' font-weight="600"'}>${esc(l)}</text>`; });
+    hover.innerHTML = h;
+  };
   svg.addEventListener("pointerdown", e => {
     const k = e.target.dataset && e.target.dataset.k;
     if (k) { dragKey = k; autoMode = false; svg.setPointerCapture(e.pointerId); }
+    else { zoomDrag = [toX(e), toX(e)]; svg.setPointerCapture(e.pointerId); }
   });
+  svg.addEventListener("pointerleave", () => { hover.innerHTML = ""; });
+  svg.addEventListener("dblclick", () => { if (xZoom) { xZoom = null; render(); } });
   svg.addEventListener("pointermove", e => {
-    if (!dragKey) return;
+    if (zoomDrag) { zoomDrag[1] = Math.max(xmin, Math.min(xmax, toX(e))); showHover(zoomDrag[1], zoomDrag); return; }
+    if (!dragKey) { showHover(toX(e)); return; }
     let v = Math.max(xmin, Math.min(xmax, toX(e)));
     if (dragKey === "t0") v = Math.min(v, bounds.m1 - 0.5);
     if (dragKey === "m1") v = Math.max(Math.min(v, bounds.m2 - 0.5), Number.isFinite(bounds.t0) ? bounds.t0 + 0.5 : -Infinity);
@@ -871,7 +961,11 @@ function render() {
     document.getElementById(dragKey).value = bounds[dragKey];
     render();
   });
-  svg.addEventListener("pointerup", () => dragKey = null);
+  svg.addEventListener("pointerup", () => {
+    dragKey = null;
+    if (zoomDrag) { const a = Math.min(...zoomDrag), b = Math.max(...zoomDrag); zoomDrag = null;
+      if (b - a > 0.5) { xZoom = [+a.toFixed(1), +b.toFixed(1)]; render(); } else hover.innerHTML = ""; }
+  });
   renderTable();
 }
 
@@ -909,8 +1003,15 @@ function renderTraceList() {
   sel.innerHTML = `<option value="">none</option>` + order.map(({ t, i }) => `<option value="${i}" ${i === cur ? "selected" : ""}>${esc(t.name)}</option>`).join("");
 }
 
+function sensRanges(S) {           // Mono/Poly min–max over the sensitivity grid (current baseline model)
+  const rng = {};
+  if (S) for (const k of S.keys) { const vs = S.blocks[0].cols.filter(c => c.ok).map(c => c.vals[k]).filter(Number.isFinite);
+    if (vs.length) rng[k] = [Math.min(...vs), Math.max(...vs)]; }
+  return rng;
+}
 function renderTable() {
   const rows = computeResults();
+  const S = sensitivity(), rng = sensRanges(S);
   const { key, dir } = sortState;
   rows.sort((a, b) => dir * (key === "name" ? byName(a, b)
     : ((isFinite(a[key]) ? a[key] : Infinity) - (isFinite(b[key]) ? b[key] : Infinity))));
@@ -924,7 +1025,8 @@ function renderTable() {
   document.querySelector("#results tbody").innerHTML = rows.map(r =>
     `<tr><td><span class="swatch" style="background:${r.color};vertical-align:-2px"></span> ${esc(r.name)}</td>` +
     `<td>${f3(r.tot)}</td><td>${f3(r.rib)}</td><td>${f3(r.aucM)}</td><td>${f3(r.aucP)}</td>` +
-    `<td class="ratio">${f3(r.mp)}</td><td>${f3(r.pm)}</td><td>${f3(r.l2)}</td>` +
+    `<td class="ratio" title="± noise-propagated 1σ (random noise + a one-sigma baseline offset); range = min–max over the sensitivity grid under the current baseline">${f3(r.mp)}` +
+      `<span class="sub2">${Number.isFinite(r.mpSd) ? "± " + r.mpSd.toFixed(3) : ""}${rng[r.key] ? " · " + f3(rng[r.key][0]) + "–" + f3(rng[r.key][1]) : ""}</span></td><td>${f3(r.pm)}</td><td>${f3(r.l2)}</td>` +
     `<td>${r.off ? r.off.toFixed(2) : "0"}${Math.abs(r.off) >= 2 ? ' <span title="x-shift ≥ 2 mm — harmless if the valleys agree after alignment (see QC)">⚠</span>' : ""}</td>` +
     `<td>${r.bl}</td><td style="text-align:left;font-size:12px;color:${r.qcn ? "#a04000" : "#667"}">${esc(r.qc.join("; "))}</td></tr>`).join("");
   const bs = document.getElementById("bstate");
@@ -932,8 +1034,9 @@ function renderTable() {
   bs.classList.toggle("auto", autoMode);
   renderExtended(rows);
   renderLandmarkLine();
-  renderSensitivity();
+  renderSensitivity(S);
   renderDesign(rows); renderContrasts(rows); renderScale(rows); renderLock();
+  scheduleAutosave();
 }
 
 function renderExtended(rows) {
@@ -1066,9 +1169,64 @@ function renderDesign(rows) {
   }
   el.innerHTML = out.join("<br>");
 }
+/* ---------------- session save / load / autosave ---------------- */
+let pendingMeta = {};
+function sessionObj() {
+  const samples = {};
+  for (const t of traces) samples[t.name] = { ...(t.meta || {}), visible: t.visible, blank: !!t.blank };
+  return { app: "polysome-auc-viewer", version: VERSION, saved: new Date().toISOString(),
+    settings: { ...settingsObj(), cropy: document.getElementById("cropy").checked, autoMode, locked, sort: sortState, xZoom },
+    samples };
+}
+function applySession(o, quiet) {
+  if (!o || o.app !== "polysome-auc-viewer") return false;
+  const s = o.settings || {};
+  if (s.profile) { const { name, ...p } = s.profile; applyProfile({ ...PROF, ...p }, PROFILES[name] ? name : "custom"); }
+  for (const k of ["t0", "m1", "m2", "p3", "h"]) if (k in s) bounds[k] = Number.isFinite(s[k]) ? s[k] : null;
+  autoMode = !!s.autoMode; syncInputs();
+  if (s.baseline) document.getElementById("bmode").value = s.baseline;
+  document.getElementById("anchorsgrp").hidden = document.getElementById("bmode").value !== "anchors";
+  if ("anchors" in s) document.getElementById("anchors").value = s.anchors || "";
+  if ("align" in s) document.getElementById("alignx").checked = !!s.align;
+  if ("despike" in s) document.getElementById("despike").checked = !!s.despike;
+  if ("cropy" in s) document.getElementById("cropy").checked = !!s.cropy;
+  if ("contrasts" in s) document.getElementById("contrasts_in").value = s.contrasts || "";
+  if (s.sort) sortState = s.sort;
+  xZoom = Array.isArray(s.xZoom) ? s.xZoom : null;
+  locked = !!s.locked;
+  pendingMeta = o.samples || {};
+  for (const t of traces) applyPendingMeta(t);
+  if (s.blank) { const b = traces.find(t => t.name === s.blank); if (b) { traces.forEach(t => t.blank = t === b); b.visible = false; } }
+  renderTraceList(); render();
+  if (!quiet) document.getElementById("sessline").textContent = `Session loaded (saved ${o.saved ? o.saved.replace("T", " ").slice(0, 16) : "?"}, tool v${o.version || "?"}).`;
+  return true;
+}
+function applyPendingMeta(t) {
+  const m = pendingMeta[t.name]; if (!m) return;
+  t.meta = { block: m.block ?? t.meta.block, group: m.group ?? t.meta.group, a260: Number.isFinite(m.a260) ? m.a260 : NaN, excl: m.excl || "" };
+  if ("visible" in m) t.visible = !!m.visible;
+}
+let autosaveTimer = null;
+function scheduleAutosave() {
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => { try { localStorage.setItem("pav_session", JSON.stringify(sessionObj())); } catch (e) {} }, 400);
+}
+document.getElementById("sesssave").addEventListener("click", () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(sessionObj(), null, 2)], { type: "application/json" }));
+  a.download = "polysome_session.json"; a.click();
+});
+document.getElementById("sessload").addEventListener("click", () => document.getElementById("sessin").click());
+document.getElementById("sessin").addEventListener("change", e => {
+  const f = e.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => { try { if (!applySession(JSON.parse(rd.result))) alert("Not a session file of this tool."); } catch (err) { alert("Could not read the session file: " + err.message); } };
+  rd.readAsText(f); e.target.value = "";
+});
+
 function settingsObj() {
   const bl = traces.find(t => t.blank);
-  return { version: VERSION, t0: bounds.t0, m1: bounds.m1, m2: bounds.m2, p3: bounds.p3, h: bounds.h, ref80: REF80, baseline: document.getElementById("bmode").value,
+  return { version: VERSION, profile: { name: profileName, ...PROF }, t0: bounds.t0, m1: bounds.m1, m2: bounds.m2, p3: bounds.p3, h: bounds.h, ref80: REF80, baseline: document.getElementById("bmode").value,
     anchors: document.getElementById("anchors").value, align: document.getElementById("alignx").checked, despike: despikeOn(),
     blank: bl ? bl.name : "", contrasts: document.getElementById("contrasts_in").value,
     excluded: traces.filter(t => t.meta && t.meta.excl).map(t => t.name + ": " + t.meta.excl),
@@ -1082,12 +1240,12 @@ function renderLock() {
   document.getElementById("lockinfo").textContent = locked ? `locked · settings hash ${settingsHash()} (stamped on exports)` : `settings hash ${settingsHash()}`;
 }
 function tidyCsv() {
-  const rows = computeResults(), S = sensitivity(), hash = settingsHash();
-  const rng = {}; if (S) for (const k of S.keys) { const vs = S.blocks[0].cols.filter(c => c.ok).map(c => c.vals[k]).filter(Number.isFinite); rng[k] = [Math.min(...vs), Math.max(...vs)]; }
+  const rows = computeResults(), S = sensitivity(), hash = settingsHash(), rng = sensRanges(S);
   const M = [["total_auc", r => r.tot], ["ribosomal_auc", r => r.rib], ["first_peak_od", r => r.p0y], ["auc_monosome", r => r.aucM], ["auc_polysomes", r => r.aucP], ["poly_over_mono", r => r.pm],
     ["mono_over_poly", r => r.mp], ["log2_poly_over_mono", r => r.l2], ["polysome_fraction", r => r.pf], ["a40", r => r.a40], ["a60", r => r.a60],
     ["free_subunit_fraction", r => r.fs], ["molar_40s_60s", r => r.molar], ["heavy_fraction", r => r.hf], ["x_shift_mm", r => r.off],
-    ["end_slope_od_per_mm", r => r.slope], ["mono_over_poly_sens_min", r => rng[r.key] ? rng[r.key][0] : NaN], ["mono_over_poly_sens_max", r => rng[r.key] ? rng[r.key][1] : NaN]];
+    ["end_slope_od_per_mm", r => r.slope], ["mono_over_poly_sd_noise", r => r.mpSd],
+    ["mono_over_poly_sens_min", r => rng[r.key] ? rng[r.key][0] : NaN], ["mono_over_poly_sens_max", r => rng[r.key] ? rng[r.key][1] : NaN]];
   const head = "sample,block,group,loaded_a260,scan_time,excluded,exclude_reason,ladder,qc,metric,value,settings_hash,tool_version\n";
   const q = s => JSON.stringify(String(s ?? ""));
   const lines = [];
@@ -1140,8 +1298,8 @@ function sensitivity() {
   return { blocks, keys: blocks[0].keys };
 }
 
-function renderSensitivity() {
-  const el = document.getElementById("sens"), S = sensitivity();
+function renderSensitivity(S) {
+  const el = document.getElementById("sens");
   if (!S || S.keys.length < 2) { el.innerHTML = ""; return; }
   const f = v => Number.isFinite(v) ? v.toFixed(3) : "—";
   const MODEL = { min: "flat minimum", g3: "flat at the 60S|80S valley", chord: "chord", anchors: "anchors", none: "none" };
@@ -1176,15 +1334,15 @@ function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
 const HELP_ICON = tab => `<a class="hl" href="#help" data-help="${tab}" title="open help">ⓘ</a>`;
 
 document.getElementById("dl").addEventListener("click", () => {
-  const rows = computeResults();
-  const head = "sample,total_auc,ribosomal_auc,first_peak_od,auc_monosome,auc_polysomes,mono_over_poly,poly_over_mono,log2_poly_over_mono," +
+  const rows = computeResults(), rngC = sensRanges(sensitivity());
+  const head = "sample,total_auc,ribosomal_auc,first_peak_od,auc_monosome,auc_polysomes,mono_over_poly,mono_over_poly_sd_noise,mono_over_poly_sens_min,mono_over_poly_sens_max,poly_over_mono,log2_poly_over_mono," +
                "polysome_fraction,a40,a60,free_subunit_fraction,molar_40s_60s,auc_heavy,heavy_fraction," +
                "x_shift_mm,x40_mm,x60_mm,x80_mm,polysome_peaks,ladder,end_slope_od_per_mm,qc," +
                "total_from_mm,mono_from_mm,mono_to_mm,poly_to_mm,heavy_from_mm,ref_80s_mm,baseline_mode,baseline_anchors_mm,despike,blank,block,group,loaded_a260,scan_time,settings_hash,tool_version\n";
   const mode = document.getElementById("bmode").value, blank = traces.find(t => t.blank);
   const n5 = v => Number.isFinite(v) ? v.toFixed(5) : "";
   const body = rows.map(r => [JSON.stringify(r.name), n5(r.tot), n5(r.rib), n5(r.p0y), n5(r.aucM), n5(r.aucP),
-    n5(r.mp), n5(r.pm), n5(r.l2), n5(r.pf), n5(r.a40), n5(r.a60), n5(r.fs), n5(r.molar), n5(r.aucH), n5(r.hf),
+    n5(r.mp), n5(r.mpSd), n5(rngC[r.key] ? rngC[r.key][0] : NaN), n5(rngC[r.key] ? rngC[r.key][1] : NaN), n5(r.pm), n5(r.l2), n5(r.pf), n5(r.a40), n5(r.a60), n5(r.fs), n5(r.molar), n5(r.aucH), n5(r.hf),
     (r.off || 0).toFixed(2), r.x40 ?? "", r.x60 ?? "", r.x80 ?? "", r.nPoly, JSON.stringify(r.ladder), n5(r.slope), JSON.stringify(r.qc.join("; ")),
     Number.isFinite(bounds.t0) ? bounds.t0 : "", bounds.m1, bounds.m2, bounds.p3, heavyOn() ? bounds.h : "", REF80, mode,
     JSON.stringify(mode === "anchors" ? parseAnchors().join(" ") : ""), despikeOn() ? "on" : "off",
@@ -1233,7 +1391,9 @@ document.getElementById("cropy").addEventListener("change", render);
 document.getElementById("alignx").addEventListener("change", render);
 document.getElementById("despike").addEventListener("change", render);
 document.getElementById("clearall").addEventListener("click", () => {
-  traces.length = 0;
+  traces.length = 0; pendingMeta = {}; xZoom = null; locked = false;
+  try { localStorage.removeItem("pav_session"); } catch (e) {}
+  document.getElementById("sessline").textContent = "";
   bounds = { t0: null, m1: null, m2: null, p3: null, h: null }; landmarks = null; autoMode = false;
   ["t0","m1","m2","p3","h","anchors"].forEach(k => document.getElementById(k).value = "");
   document.getElementById("lmline").innerHTML = ""; document.getElementById("ext").innerHTML = "";
@@ -1396,7 +1556,8 @@ function buildXlsx() {
   const settings = [["Total AUC from (mm) = onset of the first (free-RNA) peak", Number.isFinite(bounds.t0) ? bounds.t0 : "= monosome from"],
     ["Monosome from (mm)", bounds.m1], ["Monosome to / poly from (mm)", bounds.m2],
     ["Polysomes to (mm)", bounds.p3], ["Heavy polysomes from (mm)", heavyOn() ? bounds.h : "off"],
-    ["Alignment reference: 80S at (mm)", REF80], ["Blank gradient subtracted", blankT ? blankT.name : "none"],
+    ["Alignment reference: 80S at (mm)", REF80], ["Gradient profile", `${profileName}: search from ${PROF.lmStart}, 80S window ${PROF.w80lo}–${PROF.w80hi}, subunit step ${PROF.stepLo}–${PROF.stepHi}, g4 offset ${PROF.g4lo}–${PROF.g4hi} mm`],
+    ["Blank gradient subtracted", blankT ? blankT.name : "none"],
     ["Landmarks, aligned mm (40S/60S/80S; g1..g4; end)", landmarks ? `${Lm.x40 ?? "-"} / ${Lm.x60 ?? "-"} / ${Lm.x80}; ${Lm.g1 ?? "-"} ${Lm.g2 ?? "-"} ${Lm.g3 ?? "-"} ${Lm.g4 ?? "-"}; ${Lm.end}` : "none"],
     ["Baseline mode", mode], ["Baseline anchors (mm)", mode === "anchors" ? parseAnchors().join(", ") : "—"],
     ["Peak alignment", document.getElementById("alignx").checked ? "on" : "off"],
@@ -1431,7 +1592,7 @@ function buildXlsx() {
   // Summary tab: combined chart of every exported trace (aligned positions,
   // same colors as the viewer), anchored below the settings block
   if (sheets.length) {
-    const top = rows.length + 20;                       // 0-based row below the settings
+    const top = rows.length + 21;                       // 0-based row below the settings
     files.push({ name: "xl/worksheets/sheet1.xml",
                  text: sheetXml({ rows: sm, drawing: `<drawing r:id="rId1"/>` }) });
     files.push({ name: "xl/worksheets/_rels/sheet1.xml.rels", text: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -1582,12 +1743,30 @@ document.addEventListener("click", e => {
 }, true);
 try { const t = localStorage.getItem("pav_help_tab"); if (t && document.querySelector(`#help .tabs button[data-tab="${t}"]`)) showHelp(t, false); } catch (e) {}
 
+// gradient profile inputs
+applyProfile(PROF, profileName);
+document.getElementById("pf_preset").addEventListener("change", e => {
+  if (PROFILES[e.target.value]) { applyProfile(PROFILES[e.target.value], e.target.value); render(); } else profileName = "custom";
+});
+for (const k of ["ref80", "lmStart", "w80lo", "w80hi", "stepLo", "stepHi", "g4lo", "g4hi"])
+  document.getElementById("pf_" + k).addEventListener("change", e => {
+    const v = parseFloat(e.target.value); if (!Number.isFinite(v)) return;
+    applyProfile({ ...PROF, [k]: v }, "custom"); render();
+  });
+// restore the autosaved session (settings + sample metadata; files must be loaded again)
+try {
+  const raw = localStorage.getItem("pav_session");
+  if (raw) { const o = JSON.parse(raw); if (applySession(o, true))
+    document.getElementById("sessline").textContent = `Settings and sample metadata restored from the autosave of ${o.saved ? o.saved.replace("T", " ").slice(0, 16) : "?"} — load the CSV files again; “Clear all” discards the autosave.`; }
+} catch (e) {}
+
 // tiny hook so the tool can be driven for automated testing (harmless in normal use)
 window.__pav = { addFileText, setBounds: (a,b,c,h,t0) => { bounds.m1=a; bounds.m2=b; bounds.p3=c; bounds.h = h ?? null;
   if (t0 !== undefined) bounds.t0 = t0; autoMode = false; syncInputs(); render(); },
   results: computeResults, traces: () => traces, buildXlsx, sensitivity, autoBounds, landmarks: () => landmarks,
   setBlank: i => { traces.forEach((t, k) => { t.blank = (k === i); if (t.blank) t.visible = false; }); renderTraceList(); render(); },
-  tidyCsv, settingsHash, contrastTable, scalePairs };
+  tidyCsv, settingsHash, contrastTable, scalePairs, sessionObj, applySession, applyProfile, profile: () => PROF,
+  setZoom: z => { xZoom = z; render(); } };
 </script>
 </body>
 </html>
