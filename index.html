@@ -42,6 +42,27 @@
   .warn { color: #a04000; font-size: 12.5px; margin-top: 6px; }
   .legendline { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
   b.mono { color: var(--mono); } b.poly { color: var(--poly); }
+  a.hl { text-decoration: none; color: #9ab; font-size: 12px; margin-left: 4px; vertical-align: 1px; cursor: pointer; }
+  a.hl:hover { color: var(--accent); }
+  /* help panel */
+  .help .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .help .tabs button { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line); background: #f4f6f8; color: var(--fg); font-size: 12.5px; }
+  .help .tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .help section { max-width: 980px; font-size: 13px; line-height: 1.5; color: #333; }
+  .help section[hidden] { display: none; }
+  .help h3 { font-size: 13.5px; margin: 14px 0 6px; color: var(--fg); }
+  .help h3:first-child { margin-top: 0; }
+  .help p { margin: 6px 0; }
+  .help ul, .help ol { margin: 4px 0 8px; padding-left: 22px; }
+  .help li { margin: 3px 0; }
+  .help li b, .help p b { color: var(--fg); }
+  .help table { width: auto; border-collapse: collapse; margin: 6px 0 10px; font-size: 12.5px; }
+  .help th, .help td { text-align: left; vertical-align: top; padding: 5px 10px; border-bottom: 1px solid var(--line); }
+  .help th { background: #f4f6f8; color: #444; font-weight: 600; }
+  .help td:first-child { white-space: nowrap; font-weight: 600; color: var(--fg); }
+  .help .tip { background: #eef6fb; border-left: 3px solid var(--accent); padding: 6px 10px; margin: 8px 0; border-radius: 0 4px 4px 0; }
+  .help .warn2 { background: #fff4ec; border-left: 3px solid #e6550d; padding: 6px 10px; margin: 8px 0; border-radius: 0 4px 4px 0; }
+  .help code { background: #f0f2f4; padding: 0 4px; border-radius: 3px; }
 </style>
 </head>
 <body>
@@ -63,7 +84,7 @@
   <div class="controls">
     <div class="grp"><b style="color:#667">Total AUC</b>
       <label>from <input type="number" id="t0" step="0.1" placeholder="auto"> mm</label>
-      <span class="note">(onset of the very first peak — the free-RNA peak; excludes only the start artefacts before it)</span>
+      <span class="note">(onset of the very first peak — the free-RNA peak; excludes only the start artefacts before it)</span><a class="hl" href="#help" data-help="pipeline" title="Help: pipeline &amp; landmarks">ⓘ</a>
     </div>
     <div class="grp"><b class="mono">Monosome</b>
       <label>from <input type="number" id="m1" step="0.1"> mm</label>
@@ -75,7 +96,7 @@
     </div>
     <div class="grp"><b style="color:#984ea3">Heavy (≥4-mer)</b>
       <label>from <input type="number" id="h" step="0.1" placeholder="off"> mm</label>
-      <span class="note">(optional; needs a resolved ladder)</span>
+      <span class="note">(optional; needs a resolved ladder)</span><a class="hl" href="#help" data-help="metrics" title="Help: metrics">ⓘ</a>
     </div>
     <div class="grp"><label>Baseline
       <select id="bmode">
@@ -84,14 +105,14 @@
         <option value="anchors">piecewise linear — through curve at anchors</option>
         <option value="none">none (raw)</option>
       </select></label>
-      <label id="anchorsgrp" hidden>anchors (mm) <input type="text" id="anchors" size="22" placeholder="e.g. 25, 40, 74"></label>
+      <label id="anchorsgrp" hidden>anchors (mm) <input type="text" id="anchors" size="22" placeholder="e.g. 25, 40, 74"></label><a class="hl" href="#help" data-help="baseline" title="Help: baselines">ⓘ</a>
     </div>
     <div class="grp"><label><input type="checkbox" id="cropy" checked> fit y-axis to the mono/poly regions (display only)</label></div>
-    <div class="grp"><label><input type="checkbox" id="alignx" checked> align traces at the 80S peak (reference 32.0 mm)</label></div>
+    <div class="grp"><label><input type="checkbox" id="alignx" checked> align traces at the 80S peak (reference 32.0 mm)</label><a class="hl" href="#help" data-help="pipeline" title="Help: alignment">ⓘ</a></div>
     <div class="grp"><label>Blank gradient <select id="blank"><option value="">none</option></select></label>
-      <span class="note">(empty-gradient run, subtracted from every sample)</span></div>
-    <div class="grp"><button id="autob" title="Set the boundaries from the detected valleys: total from g1 (void|40S), monosome g3 (60S|80S) to g4 (80S|polysomes), polysomes to the common endpoint">Auto-set boundaries from landmarks</button></div>
-    <div class="grp"><label><input type="checkbox" id="despike"> remove spikes inside the regions (bubbles; Hampel filter)</label></div>
+      <span class="note">(empty-gradient run, subtracted from every sample)</span><a class="hl" href="#help" data-help="baseline" title="Help: blank subtraction">ⓘ</a></div>
+    <div class="grp"><button id="autob" title="Set the boundaries from the detected valleys: total from g1 (void|40S), monosome g3 (60S|80S) to g4 (80S|polysomes), polysomes to the common endpoint">Auto-set boundaries from landmarks</button><a class="hl" href="#help" data-help="pipeline" title="Help: boundary rule">ⓘ</a></div>
+    <div class="grp"><label><input type="checkbox" id="despike"> remove spikes inside the regions (bubbles; Hampel filter)</label><a class="hl" href="#help" data-help="qc" title="Help: QC flags">ⓘ</a></div>
   </div>
   <div id="chartwrap"></div>
   <div id="lmline" class="legendline"></div>
@@ -103,83 +124,21 @@
 
 <div class="panel">
   <table id="results"><thead>
-    <tr><th data-s="name">Sample</th><th data-s="tot">Total AUC</th><th data-s="rib">Ribosomal AUC</th><th data-s="aucM">AUC monosome</th><th data-s="aucP">AUC polysomes</th><th data-s="mp">Mono / Poly</th><th data-s="pm">Poly / Mono</th><th data-s="l2">log2 (Poly / Mono)</th><th data-s="off">x-shift (mm)</th><th data-s="blv">Baseline</th><th data-s="qcn">QC</th></tr>
+    <tr><th data-s="name">Sample</th><th data-s="tot">Total AUC</th><th data-s="rib">Ribosomal AUC</th><th data-s="aucM">AUC monosome</th><th data-s="aucP">AUC polysomes</th><th data-s="mp">Mono / Poly</th><th data-s="pm">Poly / Mono</th><th data-s="l2">log2 (Poly / Mono)</th><th data-s="off">x-shift (mm)</th><th data-s="blv">Baseline</th><th data-s="qcn" data-help="qc">QC</th></tr>
   </thead><tbody></tbody></table>
   <div id="ext"></div>
   <div id="sens" class="note"></div>
   <div style="margin-top:10px">
     <button id="dl">Download results as CSV</button>
     <button id="dlx">Export to Excel (.xlsx)</button>
-    <span class="note" style="margin-left:8px">Excel export: a Summary tab (settings + all AUCs/ratios + a combined
-    chart of every trace, viewer colors) plus one tab per sample with the trace data and a native Excel chart.
-    Both toggles carry over: positions are exported as displayed (aligned when alignment is on), and when the
-    y-axis fit is on, the chart y-axes are capped to the mono/poly region maximum (adjustable in Excel).</span>
+    <a class="hl" href="#help" data-help="files" title="Help: files &amp; export">ⓘ</a>
+    <span class="note" style="margin-left:8px">What each column, flag and export contains: see <b>Help</b> at the bottom of the page.</span>
   </div>
-  <div class="note">AUC = trapezoidal integral of baseline-corrected OD over the region (units: OD·mm).
-    The ratio is unitless and independent of loading and path length as long as both regions come from the same trace.
-    Method: baseline per trace by the rule chosen above; identical region boundaries for every trace.</div>
-  <div class="note"><b>Baseline options</b> — the value subtracted from the curve before integrating:<br>
-    • <b>flat — minimum inside regions</b> (default): the lowest OD between the monosome start and the polysome
-    end, per trace. Robust when the trace has a flat valley inside the regions; assumes the background is
-    constant across the gradient.<br>
-    • <b>linear — between curve at region edges</b>: a straight line from the curve value at the monosome start
-    to the value at the polysome end (a “chord”). Use when the background visibly drifts upward along the
-    gradient (e.g. rising absorbance toward the bottom) — but note it goes negative wherever the curve dips
-    below the chord.<br>
-    • <b>piecewise linear — through curve at anchors</b>: straight segments joining the curve values at the
-    anchor positions you list (flat beyond the outer anchors). Useful when the background drifts non-linearly.
-    <b>Caution:</b> anchoring at the valleys <em>between polysome peaks</em> subtracts real polysome mass — the
-    valleys of an unresolved ladder sit far above the true background, and the amount removed depends on gradient
-    resolution. For Poly/Mono totals keep anchors outside the peaks (e.g. just before the 80S and at the
-    gradient end); valley anchors are only appropriate for per-peak ladder quantification.<br>
-    • <b>none</b>: integrate the raw OD. Only comparable across samples if all traces share the same offset.<br>
-    The choice matters more than the integration itself — pick one, keep it for every sample in a comparison,
-    and report it (the CSV/Excel exports record it). The dotted line in each trace's color shows the baseline
-    actually subtracted.</div>
-  <div class="note"><b>QC column</b> (outcome-independent checks, decide exclusions <em>before</em> looking at ratios):
-    <b>spike</b> — a flow-cell bubble/particle: a 1–3-sample excursion &gt; 10 robust σ from the local median inside
-    the window (marked ▼ on the chart; “remove spikes” replaces it by the local median and states so);
-    <b>negative OD</b> inside the window (baseline/blank problem); <b>loading</b> — total corrected area (mono+poly)
-    deviating &gt; 10 % from the median of the loaded samples (unequal A260 loading or a saturated detector);
-    <b>ladder n pk</b> — resolvable polysome peaks inside the polysome window (informational: a heavy-polysome
-    boundary and per-peak metrics are only meaningful if a regular ladder is resolved);
-    <b>x-shift ⚠</b> — alignment shift ≥ 2 mm (a pure meniscus-detection offset is harmless once aligned, but
-    check that the peak <em>spacing</em> still matches the other runs — a stretched/compressed profile means a
-    different gradient).<br>
-    <b>Heavy (≥4-mer)</b>: optional boundary at the valley between the 3-mer and 4-mer peaks; reports the heavy
-    polysome fraction = AUC[heavy…end] / AUC[mono+poly]. Leave off when the ladder is not resolved.<br>
-    <b>Boundary sensitivity</b> (below the table): the primary ratio recomputed with each edge moved ±1–4 mm.
-    A stable sample ranking means the comparison is robust to the window; a flip means you are measuring the
-    setting — widen the window or report the range.<br>
-    <b>Comparing samples</b>: form ratios within each run (this tool does), compare on the log scale
-    (log2 column) and pair samples across runs/days; never pool raw AUCs across runs — they scale with loading.</div>
-  <div class="note">Tips: multi-sample “paste-up” CSVs (e.g. <code>PT_CON_1.csv</code>) put every sample on the
-    <em>first</em> sample’s position grid — the single-trace exports are the accurate source, so prefer those.
-    The duplicated readings around 0&nbsp;mm are an instrument quirk (position reset at meniscus detection);
-    keep the monosome start well above that region. The “fit y-axis” toggle only zooms the display to the
-    mono/poly regions — it never changes the numbers.
-    <b>Align traces at the 80S peak</b>: runs from one session are offset against each other by up to a few mm
-    (meniscus-detection variance). Each trace is shifted so its detected 80S peak sits at 32.0&nbsp;mm; the shift is
-    reported per sample. The landmark line then tests whether the shift was enough: if every sample's g1–g3 valleys
-    sit within 1.5&nbsp;mm of the consensus, the offset is pure and the gradients are equivalent; a larger deviation
-    means that gradient differs in scale and is flagged in QC.</div>
-  <div class="note"><b>Pipeline</b> (per sample, in this order): optional blank subtraction → spike detection/repair →
-    Savitzky-Golay smoothing (15 samples, cubic; used <em>only</em> to locate landmarks) → landmarks: the very first
-    (free-RNA) peak and its onset, the most prominent peak in 22–42&nbsp;mm = 80S, then 60S and 40S walking left in
-    4–9.5&nbsp;mm steps, polysome peaks to the right (prominence ≥ max(0.003&nbsp;OD, 6σ), ≥ 1.2&nbsp;mm apart), and
-    the valleys g1 (void|40S), g2 (40S|60S), g3 (60S|80S), g4 (80S|polysomes: minimum in 80S + 6…12&nbsp;mm) →
-    alignment → consensus landmarks (medians over samples) → <b>Auto-set boundaries</b>: total from the first-peak
-    onset, monosome g3…g4, polysomes g4…common endpoint (shortest coverage − 0.5&nbsp;mm). Integration always uses the
-    unsmoothed data. <b>Total AUC</b> starts at the onset of the very first peak and therefore includes the free-RNA
-    peak (use it to compare loading between samples; if that peak exceeds ~3&nbsp;OD the detector may be non-linear
-    there — the <em>ribosomal AUC</em> in the extended table, from g1, is the safer anchor). The <b>ladder verdict</b>
-    requires the first peak after the 80S to sit 1.1–2.0× the 60S→80S step away (a disome) and ≥ 3 polysome peaks
-    with shrinking spacings; without it, per-peak metrics are not meaningful but Poly/Mono still is.</div>
 </div>
 
 <div class="panel">
   <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
-    <b>Design &amp; contrasts</b>
+    <b>Design &amp; contrasts</b><a class="hl" href="#help" data-help="stats" title="Help: sensitivity &amp; contrasts">ⓘ</a>
     <label>contrasts <input type="text" id="contrasts_in" size="44" placeholder="e.g. KO_CON vs PT_CON; KO_MG vs PT_MG"></label>
     <button id="lockbtn">Lock settings</button><span id="lockinfo" class="note"></span>
     <button id="dltidy">Download tidy table (CSV)</button>
@@ -187,13 +146,139 @@
   <div id="design" class="note"></div>
   <div id="contrasts"></div>
   <div id="scale"></div>
-  <div class="note">Per sample, set <b>block</b> (one rotor/spin of one biological replicate), <b>group</b> (condition) and the
-    <b>loaded A260</b> (if recorded) in the file list; type an <b>exclude</b> reason to drop a sample on outcome-independent QC grounds
-    (it stays on the chart, dimmed, and is recorded as excluded). Contrasts are per-block differences of log2(Poly / Mono) between
-    group means (A vs B = A − B); with fewer than three blocks the summary is descriptive only. The scale test fits one scalar between
-    two baseline-subtracted, aligned traces over the integration window: a small residual means a loading difference only, a large
-    one a real shape difference. <b>Lock settings</b> freezes every analysis setting and stamps all exports with a settings hash —
-    decide metric, baseline, boundaries and exclusions before looking at the contrasts.</div>
+</div>
+
+<div class="panel help" id="help">
+  <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><b style="font-size:15px">Help</b>
+    <span class="note">one topic per tab — click to switch</span></div>
+  <div class="tabs" style="margin-top:8px">
+    <button data-tab="start" class="active">Quick start</button>
+    <button data-tab="pipeline">Pipeline &amp; landmarks</button>
+    <button data-tab="baseline">Baselines</button>
+    <button data-tab="metrics">Metrics</button>
+    <button data-tab="qc">QC flags</button>
+    <button data-tab="stats">Sensitivity &amp; contrasts</button>
+    <button data-tab="files">Files &amp; export</button>
+  </div>
+
+  <section data-tab="start">
+    <h3>A typical session</h3>
+    <ol>
+      <li><b>Load</b> the single-trace instrument exports (one CSV per sample). Add an empty-gradient run if you have one and select it as <b>Blank gradient</b>.</li>
+      <li><b>Check the landmark line</b> under the chart: 40S / 60S / 80S positions, valleys g1–g4, and the pure-offset verdict. If a sample's valleys deviate, its QC flag tells you.</li>
+      <li><b>Auto-set boundaries</b> (done automatically on load; press the button again after adding or hiding samples). Drag the lines only if the rule puts one somewhere obviously wrong — and then keep it there for every sample.</li>
+      <li>Tick <b>remove spikes</b>; keep the <b>flat — minimum</b> baseline unless you loaded a blank.</li>
+      <li>Fill in <b>block</b>, <b>group</b> and (if recorded) <b>loaded A260</b> per sample, type the <b>contrasts</b> you planned, then <b>Lock settings</b>.</li>
+      <li>Read the results table together with its <b>QC</b> column and the <b>sensitivity</b> range; export the tidy table for statistics.</li>
+    </ol>
+    <div class="tip">Decide metric, baseline, boundary rule and exclusion criteria <em>before</em> looking at the ratios. The lock stamps a settings hash on every export so later changes are visible.</div>
+  </section>
+
+  <section data-tab="pipeline" hidden>
+    <h3>What happens to each trace, in order</h3>
+    <ol>
+      <li><b>Blank subtraction</b> (optional): the blank's OD, interpolated on the sample's raw positions, is subtracted first.</li>
+      <li><b>Spike repair</b>: bubbles are 1–3-sample excursions &gt; 10 robust σ from a ±0.3 mm running median (σ from the median absolute first difference, floor 0.003 OD). They are always flagged; with <b>remove spikes</b> on they are replaced by the local median.</li>
+      <li><b>Smoothing</b>: Savitzky-Golay, 1.5 mm window, cubic — used <em>only</em> to find peaks and valleys. Integration always uses the unsmoothed data.</li>
+      <li><b>Landmarks</b>: the very first (free-RNA) peak and its onset (trace drops below 5 % of the apex); the <b>80S</b> = most prominent peak in 22–42 mm; <b>60S</b> and <b>40S</b> walking left in 4–9.5 mm steps; polysome peaks to the right. Peaks need prominence ≥ max(0.003 OD, 6σ) and ≥ 1.2 mm separation.</li>
+      <li><b>Alignment</b>: every trace is shifted so its 80S sits at 32.0 mm (the reference is fixed, so windows are portable between sessions).</li>
+      <li><b>Consensus</b>: medians of the aligned valleys over the loaded samples; the common endpoint is the shortest coverage − 0.5 mm.</li>
+    </ol>
+    <h3>Valleys and the boundary rule</h3>
+    <table><tr><th>valley</th><th>between</th><th>used for</th></tr>
+      <tr><td>g1</td><td>void tail | 40S</td><td>start of the ribosomal AUC and of A40</td></tr>
+      <tr><td>g2</td><td>40S | 60S</td><td>A40 / A60 split</td></tr>
+      <tr><td>g3</td><td>60S | 80S</td><td>monosome start</td></tr>
+      <tr><td>g4</td><td>80S | polysomes (minimum in 80S + 6…12 mm)</td><td>monosome end / polysome start</td></tr>
+      <tr><td>end</td><td>—</td><td>polysome end: common endpoint of all loaded samples</td></tr></table>
+    <p><b>Total AUC</b> starts at the onset of the very first data peak, so it includes the free-RNA peak and excludes only the start artefacts before it.</p>
+    <h3>Pure-offset test</h3>
+    <p>If every sample's g1–g3 valleys sit within 1.5 mm of the consensus after alignment, the x-shifts are a pure meniscus-detection offset and the gradients are physically equivalent. A larger deviation means that gradient differs in scale; a single shift cannot align it, and the sample is flagged.</p>
+    <h3>Ladder verdict</h3>
+    <p>“Resolved” requires the first peak after the 80S to sit 1.1–2.0× the 60S→80S step away (a disome) and at least three polysome peaks with shrinking spacings. Without a resolved ladder, per-peak metrics (heavy fraction, ribosomes per mRNA) are not meaningful — Poly/Mono still is.</p>
+  </section>
+
+  <section data-tab="baseline" hidden>
+    <h3>What is subtracted before integrating</h3>
+    <table><tr><th>mode</th><th>baseline</th><th>use when</th></tr>
+      <tr><td>flat — minimum</td><td>the lowest OD between monosome start and polysome end, per trace (default)</td><td>no blank available; unresolved ladder. Attributes all end-of-gradient rise to polysomes.</td></tr>
+      <tr><td>linear — chord</td><td>straight line between the curve at the monosome start and at the polysome end</td><td>rarely: it goes negative wherever the curve dips below the chord, and with a rising heavy-polysome tail it cuts through the polysomes.</td></tr>
+      <tr><td>piecewise — anchors</td><td>segments joining the curve at the positions you list (flat beyond the outer anchors)</td><td>non-linear drift with anchors <em>outside</em> the peaks.</td></tr>
+      <tr><td>none</td><td>raw OD</td><td>after blank subtraction, or when all traces share one offset.</td></tr></table>
+    <div class="warn2"><b>Do not anchor at the valleys between polysome peaks</b> for Poly/Mono. On an unresolved ladder the valleys <em>are</em> the polysome hump; connecting them subtracts the polysomes and leaves only ripples. Valley-to-valley baselines are for quantifying individual resolved peaks (the tool uses one for A40/A60, where the 40S and 60S are resolved).</div>
+    <div class="tip"><b>Best: an empty gradient.</b> Only a blank run under identical conditions can separate sucrose/refraction drift from the heavy-polysome rise at the tube bottom. One blank per session serves all runs of that session.</div>
+    <p>The dotted line in each trace's colour shows the baseline actually subtracted. A baseline error δ matters more than any integration detail: over a ~33 mm polysome window, 0.005 OD is ≈ 20 % of Apoly. Negative areas mean the baseline sits above the data — fix the model rather than dropping the sample. Nothing is clipped.</p>
+  </section>
+
+  <section data-tab="metrics" hidden>
+    <h3>Main table</h3>
+    <table><tr><th>column</th><th>definition</th></tr>
+      <tr><td>Total AUC</td><td>area from the onset of the first data peak to the endpoint (OD·mm); compare loading between samples</td></tr>
+      <tr><td>Ribosomal AUC</td><td>area from g1 to the endpoint — excludes the free-RNA peak; the safer loading anchor when the first peak exceeds ~3 OD (detector non-linearity)</td></tr>
+      <tr><td>AUC monosome / polysomes</td><td>areas of the two regions after baseline subtraction</td></tr>
+      <tr><td>Mono / Poly, Poly / Mono</td><td>the ratios; unitless, loading cancels once the baseline is right</td></tr>
+      <tr><td>log2 (Poly / Mono)</td><td>the scale on which to compare and average ratios</td></tr>
+      <tr><td>x-shift</td><td>alignment shift applied (mm); ⚠ at ≥ 2 mm only as a reminder to check the pure-offset test</td></tr></table>
+    <h3>Extended table</h3>
+    <table><tr><th>column</th><th>definition</th></tr>
+      <tr><td>First peak (OD)</td><td>apex of the free-RNA peak</td></tr>
+      <tr><td>A40, A60</td><td>areas of the 40S and 60S peaks with a valley-to-valley baseline through g1–g2–g3</td></tr>
+      <tr><td>Poly fraction</td><td>Apoly / (Apoly + A80)</td></tr>
+      <tr><td>Free-subunit fraction</td><td>(A40 + A60) / ribosomal AUC</td></tr>
+      <tr><td>Molar 40S:60S</td><td>A40/A60 ÷ 0.35 — A260 scales with rRNA mass (18S ≈ 1.9 kb vs 28S+5.8S+5S ≈ 5.3 kb), so equimolar subunits give an area ratio of ≈ 0.35</td></tr>
+      <tr><td>Heavy fraction</td><td>AUC[heavy…end] / AUC[mono+poly]; needs the optional heavy boundary and a resolved ladder</td></tr>
+      <tr><td>40S / 60S / 80S</td><td>detected peak positions, raw (unaligned) mm</td></tr>
+      <tr><td>Polysome ladder</td><td>the verdict and its reason</td></tr>
+      <tr><td>End slope</td><td>slope of the smoothed trace over the last 3 mm before the endpoint; positive = still rising</td></tr></table>
+    <p>All areas are trapezoidal integrals on the actual sample positions with exact interpolation at the region edges.</p>
+  </section>
+
+  <section data-tab="qc" hidden>
+    <h3>Outcome-independent checks</h3>
+    <p>Every flag is computed without looking at the ratios. Decide exclusions on these grounds (type a reason in the sample's <b>exclude</b> field) — excluding a sample because its ratio does not fit is data selection, whatever test justifies it.</p>
+    <table><tr><th>flag</th><th>meaning</th><th>what to do</th></tr>
+      <tr><td>spike ×n at …</td><td>bubble/particle excursions inside the window (▼ on the chart)</td><td>tick <b>remove spikes</b>; exclude only if a spike is wide or sits on a peak apex</td></tr>
+      <tr><td>negative OD in window</td><td>raw OD below zero</td><td>blank/zeroing problem — check the run</td></tr>
+      <tr><td>negative area</td><td>baseline above the data</td><td>change the baseline model, do not drop the sample</td></tr>
+      <tr><td>loading ±x % vs median</td><td>Total AUC deviates &gt; 10 % from the median of the loaded samples</td><td>advisory for ratios (loading cancels); matters for absolute areas</td></tr>
+      <tr><td>valleys off by x mm</td><td>after alignment this sample's g1–g3 deviate &gt; 1.5 mm from the consensus</td><td>gradient differs in scale — not comparable by a shift</td></tr>
+      <tr><td>still rising at the endpoint</td><td>the trace climbs into the tube bottom: heavy polysomes are truncated</td><td>report the ratio as a lower bound; consider a gradient that captures the heavy end</td></tr>
+      <tr><td>no 80S peak found</td><td>landmarks and alignment unavailable</td><td>check the trace; set boundaries by hand</td></tr>
+      <tr><td>trace does not cover the regions</td><td>the trace ends before the endpoint</td><td>use the common endpoint (auto-set does)</td></tr>
+      <tr><td>scan order confounded (design line)</td><td>within a block, one group was scanned entirely after another; gradients diffuse while they wait</td><td>alternate the order in the next rotor; record scan times</td></tr></table>
+  </section>
+
+  <section data-tab="stats" hidden>
+    <h3>Boundary / baseline sensitivity</h3>
+    <p>Mono / Poly is recomputed with the mono|poly boundary moved ±1–2 mm and the endpoint pulled back 4–16 mm, under two baseline models. A stable sample ranking means you are measuring the samples; a flip means you are measuring the setting — widen the window or report the min–max range beside the value. A model that produces negative areas is marked inadmissible.</p>
+    <h3>Blocks, groups, contrasts</h3>
+    <ul>
+      <li><b>Block</b> = one rotor/spin of one biological replicate; <b>group</b> = condition. Three rotors = n = 3, blocked.</li>
+      <li>Contrasts (<code>A vs B; C vs D</code>) are per-block differences of log2(Poly / Mono) between group means. With fewer than three blocks the summary is descriptive; from three blocks a paired t over blocks is shown. Never pool raw areas across blocks — they scale with loading and discard the blocking.</li>
+      <li>With the replicate scatter typical of these gradients, three rotors with one tube per condition detect only several-fold effects; plan duplicates per rotor or more rotors, and recompute after the first two.</li>
+    </ul>
+    <h3>Scale test</h3>
+    <p>For every pair, one scalar <em>c</em> is fitted so that A ≈ c·B over the integration window (baseline-subtracted, aligned). Residual ≤ 10 % of A's RMS: the two differ by loading only; &gt; 25 %: a real shape difference — a diagnostic that sends you to the lab notebook, not an exclusion criterion.</p>
+    <h3>Lock settings</h3>
+    <p>Freezes every analysis control and stamps a settings hash (boundaries, baseline, alignment, despiking, blank, contrasts, exclusions, QC thresholds) on the CSV, tidy CSV and Excel exports.</p>
+  </section>
+
+  <section data-tab="files" hidden>
+    <h3>Input files</h3>
+    <ul>
+      <li><b>Single-trace instrument exports</b> (BioComp Triax <code>.csv</code>) are the accurate source. Multi-sample “paste-up” CSVs put every sample on the <em>first</em> sample's position grid (0.1–0.5 mm off) — avoid them.</li>
+      <li>The duplicated readings around 0 mm are an instrument quirk (position reset at meniscus detection); the first-peak onset rule skips them.</li>
+      <li>Plain two-column position/OD files (<code>.txt</code>/<code>.csv</code>) are accepted too.</li>
+      <li>Scan date and time are read from the file header and shown next to each sample.</li>
+    </ul>
+    <h3>Display</h3>
+    <p>“Fit y-axis” only zooms the display to the mono/poly regions; it never changes numbers. Excluded samples stay on the chart, dimmed and dashed.</p>
+    <h3>Exports</h3>
+    <table><tr><th>export</th><th>contents</th></tr>
+      <tr><td>Results CSV</td><td>one row per sample: all columns of both tables, QC, boundaries, baseline, alignment reference, blank, metadata, settings hash</td></tr>
+      <tr><td>Tidy CSV</td><td>long format (sample × metric, with block/group/scan time/exclusion and the sensitivity range) — the input for statistics in R</td></tr>
+      <tr><td>Excel</td><td><b>Summary</b> (all results, settings, combined chart in the viewer's colours), one tab per sample with its data and a native chart (positions as displayed, i.e. aligned; y-axes capped when the y-fit is on), <b>Sensitivity</b> and <b>Contrasts</b> sheets</td></tr></table>
+  </section>
 </div>
 
 <script>
@@ -805,7 +890,8 @@ function renderTable() {
     : ((isFinite(a[key]) ? a[key] : Infinity) - (isFinite(b[key]) ? b[key] : Infinity))));
   document.querySelectorAll("#results thead th").forEach(th => {
     const k = th.dataset.s;
-    th.textContent = th.textContent.replace(/ [▲▼]$/, "") + (k === key ? (dir === 1 ? " ▲" : " ▼") : "");
+    if (!th.dataset.label) th.dataset.label = th.textContent.replace(/ [▲▼]$/, "").replace(/ⓘ$/, "").trim();
+    th.innerHTML = esc(th.dataset.label) + (k === key ? (dir === 1 ? " ▲" : " ▼") : "") + (th.dataset.help ? HELP_ICON(th.dataset.help) : "");
     th.style.cursor = "pointer";
   });
   const f3 = v => Number.isFinite(v) ? v.toFixed(3) : "—";
@@ -826,7 +912,7 @@ function renderExtended(rows) {
   if (!rows.length) { el.innerHTML = ""; return; }
   const f3 = v => Number.isFinite(v) ? v.toFixed(3) : "—", f2 = v => Number.isFinite(v) ? v.toFixed(2) : "—";
   const f1 = v => Number.isFinite(v) ? v.toFixed(1) : "—";
-  let h = `<div style="margin-top:12px"><b>Extended metrics</b> <span class="note">— A40/A60 use a valley-to-valley baseline (g1–g2–g3); ` +
+  let h = `<div style="margin-top:12px"><b>Extended metrics</b>${HELP_ICON("metrics")} <span class="note">— A40/A60 use a valley-to-valley baseline (g1–g2–g3); ` +
     `first peak (OD) = apex of the free-RNA peak (above ~3 OD the detector may be non-linear, then prefer the ribosomal AUC = g1 → endpoint for loading); ` +
     `polysome fraction = Apoly/(Apoly+A80); free-subunit fraction = (A40+A60)/ribosomal; molar 40S:60S = area ratio ÷ 0.35; ` +
     `heavy fraction needs the heavy boundary and a resolved ladder; landmark positions are raw (unaligned) mm.</span></div>` +
@@ -897,7 +983,7 @@ function renderContrasts(rows) {
   const el = document.getElementById("contrasts"), C = contrastTable(rows, r => r.pm);
   if (!C.length) { el.innerHTML = ""; return; }
   const f = v => Number.isFinite(v) ? v.toFixed(3) : "—";
-  let h = `<div style="margin-top:8px"><b>Contrasts</b> — per-block log2(Poly / Mono), A − B; group means within each block</div>` +
+  let h = `<div style="margin-top:8px"><b>Contrasts</b>${HELP_ICON("stats")} — per-block log2(Poly / Mono), A − B; group means within each block</div>` +
     `<table style="margin-top:4px;font-size:12px"><thead><tr><th>Contrast</th><th>blocks</th><th>per-block log2 difference</th><th>mean</th><th>SD</th><th>fold</th><th>paired t</th><th>p</th><th>verdict</th></tr></thead><tbody>`;
   for (const c of C) {
     const verdict = c.n === 0 ? "no block has both groups" : c.n < 3 ? `n = ${c.n} block${c.n > 1 ? "s" : ""}: descriptive only — no inference`
@@ -924,7 +1010,7 @@ function renderScale(rows) {
   const el = document.getElementById("scale");
   if (rows.length < 2) { el.innerHTML = ""; return; }
   const P = scalePairs(rows);
-  let h = `<div style="margin-top:10px"><b>Scale test</b> — A ≈ c·B over the integration window; residual as % of A's RMS: ≤ 10 % loading-only, > 25 % real shape difference</div>` +
+  let h = `<div style="margin-top:10px"><b>Scale test</b>${HELP_ICON("stats")} — A ≈ c·B over the integration window; residual as % of A's RMS: ≤ 10 % loading-only, > 25 % real shape difference</div>` +
     `<div style="overflow-x:auto"><table style="margin-top:4px;font-size:12px"><thead><tr><th>A</th><th>B</th><th>c</th><th>residual</th><th></th></tr></thead><tbody>`;
   for (const p of P) h += `<tr><td style="text-align:left">${esc(p.a)}</td><td style="text-align:left">${esc(p.b)}</td><td>${p.c.toFixed(2)}</td><td>${(p.res * 100).toFixed(0)} %</td>` +
     `<td style="text-align:left;color:${p.res > 0.25 ? "#a04000" : p.res > 0.10 ? "#7a5a00" : "#2a7a2a"}">${p.res > 0.25 ? "shape difference" : p.res > 0.10 ? "moderate" : "loading-only"}</td></tr>`;
@@ -990,7 +1076,7 @@ function renderLandmarkLine() {
   const el = document.getElementById("lmline");
   if (!landmarks) { el.innerHTML = ""; return; }
   const g = landmarks, f = v => v == null ? "—" : v.toFixed(1);
-  el.innerHTML = `<b>Landmarks (aligned, consensus of ${traces.filter(t => t.visible && !t.blank && t.lm && t.lm.x80 != null).length} samples):</b> ` +
+  el.innerHTML = `<b>Landmarks (aligned, consensus of ${traces.filter(t => t.visible && !t.blank && t.lm && t.lm.x80 != null).length} samples):</b>${HELP_ICON("pipeline")} ` +
     `first-peak onset ${f(g.t0)} · 40S ${f(g.x40)} · 60S ${f(g.x60)} · 80S ${f(g.x80)} mm; valleys g1 ${f(g.g1)} · g2 ${f(g.g2)} · g3 ${f(g.g3)} · g4 ${f(g.g4)} mm; ` +
     `common endpoint ${f(g.end)} mm. Valley spread across samples: g1 ${f(g.g1_spread)} · g2 ${f(g.g2_spread)} · g3 ${f(g.g3_spread)} · g4 ${f(g.g4_spread)} mm — ` +
     (g.pureOffset ? `<span style="color:#2a7a2a">✓ every sample's g1–g3 valleys sit within ${LM_TOL} mm of the consensus: the x-shifts are a pure offset, the gradients are equivalent.</span>`
@@ -1030,7 +1116,7 @@ function renderSensitivity() {
   if (!S || S.keys.length < 2) { el.innerHTML = ""; return; }
   const f = v => Number.isFinite(v) ? v.toFixed(3) : "—";
   const MODEL = { min: "flat minimum", g3: "flat at the 60S|80S valley", chord: "chord", anchors: "anchors", none: "none" };
-  let h = `<div style="margin-top:12px"><b>Boundary / baseline sensitivity</b> — Mono / Poly recomputed with the mono|poly boundary moved ±1–2 mm and ` +
+  let h = `<div style="margin-top:12px"><b>Boundary / baseline sensitivity</b>${HELP_ICON("stats")} — Mono / Poly recomputed with the mono|poly boundary moved ±1–2 mm and ` +
           `the endpoint pulled back 4–16 mm, under two baseline models. Stable sample ranking = you are measuring the samples; flips = the setting.</div>`;
   for (const B of S.blocks) {
     h += `<div style="margin-top:6px"><b>${MODEL[B.model] || B.model}</b>: ` +
@@ -1058,6 +1144,7 @@ document.querySelectorAll("#results thead th").forEach(th =>
   }));
 
 function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+const HELP_ICON = tab => `<a class="hl" href="#help" data-help="${tab}" title="open help">ⓘ</a>`;
 
 document.getElementById("dl").addEventListener("click", () => {
   const rows = computeResults();
@@ -1422,6 +1509,21 @@ document.getElementById("dlx").addEventListener("click", () => {
   a.download = "polysome_traces.xlsx";
   a.click();
 });
+
+// help tabs + contextual ⓘ links
+function showHelp(tab, scroll) {
+  document.querySelectorAll("#help .tabs button").forEach(x => x.classList.toggle("active", x.dataset.tab === tab));
+  document.querySelectorAll("#help section").forEach(s => s.hidden = s.dataset.tab !== tab);
+  try { localStorage.setItem("pav_help_tab", tab); } catch (e) {}
+  if (scroll) document.getElementById("help").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+document.querySelectorAll("#help .tabs button").forEach(b => b.addEventListener("click", () => showHelp(b.dataset.tab, false)));
+document.addEventListener("click", e => {
+  const a = e.target.closest && e.target.closest("a.hl");
+  if (!a) return;
+  e.preventDefault(); e.stopPropagation(); showHelp(a.dataset.help, true);
+}, true);
+try { const t = localStorage.getItem("pav_help_tab"); if (t && document.querySelector(`#help .tabs button[data-tab="${t}"]`)) showHelp(t, false); } catch (e) {}
 
 // tiny hook so the tool can be driven for automated testing (harmless in normal use)
 window.__pav = { addFileText, setBounds: (a,b,c,h,t0) => { bounds.m1=a; bounds.m2=b; bounds.p3=c; bounds.h = h ?? null;
