@@ -103,7 +103,7 @@
 
 <div class="panel">
   <table id="results"><thead>
-    <tr><th data-s="name">Sample</th><th data-s="tot">Total AUC</th><th data-s="aucM">AUC monosome</th><th data-s="aucP">AUC polysomes</th><th data-s="mp">Mono / Poly</th><th data-s="pm">Poly / Mono</th><th data-s="l2">log2 (Poly / Mono)</th><th data-s="off">x-shift (mm)</th><th data-s="blv">Baseline</th><th data-s="qcn">QC</th></tr>
+    <tr><th data-s="name">Sample</th><th data-s="tot">Total AUC</th><th data-s="rib">Ribosomal AUC</th><th data-s="aucM">AUC monosome</th><th data-s="aucP">AUC polysomes</th><th data-s="mp">Mono / Poly</th><th data-s="pm">Poly / Mono</th><th data-s="l2">log2 (Poly / Mono)</th><th data-s="off">x-shift (mm)</th><th data-s="blv">Baseline</th><th data-s="qcn">QC</th></tr>
   </thead><tbody></tbody></table>
   <div id="ext"></div>
   <div id="sens" class="note"></div>
@@ -615,7 +615,6 @@ function computeResults(opts) {
     for (let i = 0; i < t.x.length; i++) if (px_(t, i) >= t0 && px_(t, i) <= bounds.p3 && y[i] < 0) { negOD = true; break; }
     const qc = [];
     if (lm.x80 == null) qc.push("⚠ no 80S peak found — landmarks/alignment unavailable");
-    if (Number.isFinite(lm.p0y) && lm.p0y > 3) qc.push(`⚠ first (free-RNA) peak reaches ${lm.p0y.toFixed(1)} OD — detector may be non-linear there; total AUC as a loading proxy is uncertain, use the ribosomal AUC`);
     if (!covered) qc.push("⚠ trace does not cover the regions");
     if (spikesIn.length) {
       const ev = []; for (const i of spikesIn) { const xv = px_(t, i); if (!ev.length || xv - ev[ev.length - 1] > 0.6) ev.push(xv); }
@@ -643,7 +642,7 @@ function computeResults(opts) {
   rows.forEach((r, i) => {
     r.load = med > 0 ? (totals[i] - med) / med : NaN;
     if (Number.isFinite(r.load) && Math.abs(r.load) > 0.10 && rows.length > 1)
-      r.qc.push(`⚠ total AUC ${r.load > 0 ? "+" : ""}${(r.load * 100).toFixed(0)}% vs median (loading)`);
+      r.qc.push(`⚠ loading ${r.load > 0 ? "+" : ""}${(r.load * 100).toFixed(0)}% vs median`);
     r.qcn = r.qc.filter(q => q.startsWith("⚠")).length;
   });
   return rows;
@@ -812,7 +811,7 @@ function renderTable() {
   const f3 = v => Number.isFinite(v) ? v.toFixed(3) : "—";
   document.querySelector("#results tbody").innerHTML = rows.map(r =>
     `<tr><td><span class="swatch" style="background:${r.color};vertical-align:-2px"></span> ${esc(r.name)}</td>` +
-    `<td>${f3(r.tot)}</td><td>${f3(r.aucM)}</td><td>${f3(r.aucP)}</td>` +
+    `<td>${f3(r.tot)}</td><td>${f3(r.rib)}</td><td>${f3(r.aucM)}</td><td>${f3(r.aucP)}</td>` +
     `<td class="ratio">${f3(r.mp)}</td><td>${f3(r.pm)}</td><td>${f3(r.l2)}</td>` +
     `<td>${r.off ? r.off.toFixed(2) : "0"}${Math.abs(r.off) >= 2 ? ' <span title="x-shift ≥ 2 mm — harmless if the valleys agree after alignment (see QC)">⚠</span>' : ""}</td>` +
     `<td>${r.bl}</td><td style="text-align:left;font-size:12px;color:${r.qcn ? "#a04000" : "#667"}">${esc(r.qc.join("; "))}</td></tr>`).join("");
@@ -828,14 +827,14 @@ function renderExtended(rows) {
   const f3 = v => Number.isFinite(v) ? v.toFixed(3) : "—", f2 = v => Number.isFinite(v) ? v.toFixed(2) : "—";
   const f1 = v => Number.isFinite(v) ? v.toFixed(1) : "—";
   let h = `<div style="margin-top:12px"><b>Extended metrics</b> <span class="note">— A40/A60 use a valley-to-valley baseline (g1–g2–g3); ` +
-    `ribosomal AUC = g1 (void|40S valley) → endpoint, the loading anchor that excludes the free-RNA peak; ` +
+    `first peak (OD) = apex of the free-RNA peak (above ~3 OD the detector may be non-linear, then prefer the ribosomal AUC = g1 → endpoint for loading); ` +
     `polysome fraction = Apoly/(Apoly+A80); free-subunit fraction = (A40+A60)/ribosomal; molar 40S:60S = area ratio ÷ 0.35; ` +
     `heavy fraction needs the heavy boundary and a resolved ladder; landmark positions are raw (unaligned) mm.</span></div>` +
-    `<div style="overflow-x:auto"><table style="margin-top:6px;font-size:12px"><thead><tr><th>Sample</th><th>Ribosomal AUC</th><th>First peak (OD)</th><th>A40</th><th>A60</th>` +
+    `<div style="overflow-x:auto"><table style="margin-top:6px;font-size:12px"><thead><tr><th>Sample</th><th>First peak (OD)</th><th>A40</th><th>A60</th>` +
     `<th>Poly fraction</th><th>Free-subunit fraction</th><th>Molar 40S:60S</th><th>Heavy fraction</th><th>40S / 60S / 80S (mm)</th>` +
     `<th>Polysome ladder</th><th>End slope (mOD/mm)</th></tr></thead><tbody>`;
   for (const r of rows)
-    h += `<tr><td>${esc(r.name)}</td><td>${f3(r.rib)}</td><td>${f2(r.p0y)}</td><td>${f3(r.a40)}</td><td>${f3(r.a60)}</td><td>${f3(r.pf)}</td><td>${f3(r.fs)}</td>` +
+    h += `<tr><td>${esc(r.name)}</td><td>${f2(r.p0y)}</td><td>${f3(r.a40)}</td><td>${f3(r.a60)}</td><td>${f3(r.pf)}</td><td>${f3(r.fs)}</td>` +
          `<td>${f2(r.molar)}</td><td>${f3(r.hf)}</td><td>${f1(r.x40)} / ${f1(r.x60)} / ${f1(r.x80)}</td>` +
          `<td style="text-align:left">${esc(r.ladder)}</td><td>${Number.isFinite(r.slope) ? (r.slope * 1000).toFixed(2) : "—"}</td></tr>`;
   el.innerHTML = h + `</tbody></table></div>`;
