@@ -330,17 +330,20 @@
 
   <section data-tab="qc" hidden>
     <h3>Outcome-independent checks</h3>
-    <p>Every flag is computed without looking at the ratios. Decide exclusions on these grounds (type a reason in the sample's <b>exclude</b> field) — excluding a sample because its ratio does not fit is data selection, whatever test justifies it.</p>
-    <table><tr><th>flag</th><th>meaning</th><th>what to do</th></tr>
-      <tr><td>spike ×n at …</td><td>bubble/particle excursions inside the window (▼ on the chart)</td><td>tick <b>remove spikes</b>; exclude only if a spike is wide or sits on a peak apex</td></tr>
-      <tr><td>negative OD in window</td><td>raw OD below zero</td><td>blank/zeroing problem — check the run</td></tr>
-      <tr><td>negative area</td><td>baseline above the data</td><td>change the baseline model, do not drop the sample</td></tr>
-      <tr><td>loading ±x % vs median</td><td>Total AUC deviates &gt; 10 % from the median of the loaded samples</td><td>advisory for ratios (loading cancels); matters for absolute areas</td></tr>
-      <tr><td>valleys off by x mm</td><td>after alignment this sample's g1–g3 deviate &gt; 1.5 mm from the consensus</td><td>gradient differs in scale — not comparable by a shift</td></tr>
-      <tr><td>still rising at the endpoint</td><td>the trace climbs into the tube bottom: heavy polysomes are truncated</td><td>report the ratio as a lower bound; consider a gradient that captures the heavy end</td></tr>
-      <tr><td>no 80S peak found</td><td>landmarks and alignment unavailable</td><td>check the trace; set boundaries by hand</td></tr>
-      <tr><td>trace does not cover the regions</td><td>the trace ends before the endpoint</td><td>use the common endpoint (auto-set does)</td></tr>
-      <tr><td>scan order confounded (design line)</td><td>within a block, one group was scanned entirely after another; gradients diffuse while they wait</td><td>alternate the order in the next rotor; record scan times</td></tr></table>
+    <p>Every flag is computed without looking at the ratios and shown as a short badge in the QC column; hover a badge for the full explanation (the exports carry the full text). Decide exclusions on these grounds (type a reason in the sample's <b>Exclude</b> field) — excluding a sample because its ratio does not fit is data selection, whatever test justifies it.</p>
+    <table><tr><th>badge</th><th>meaning</th><th>what to do</th></tr>
+      <tr><td><span class="badge ok">ok</span></td><td>no check fired</td><td>—</td></tr>
+      <tr><td><span class="badge warn">spike ×n</span></td><td>n bubble/particle excursions inside the window (▼ on the chart; positions in the hover text)</td><td>tick <b>repair spikes</b>; exclude only if a spike is wide or sits on a peak apex</td></tr>
+      <tr><td><span class="badge warn">negative OD</span></td><td>raw OD below zero inside the window</td><td>blank/zeroing problem — check the run</td></tr>
+      <tr><td><span class="badge warn">negative area</span></td><td>the baseline sits above the data</td><td>change the baseline model, do not drop the sample</td></tr>
+      <tr><td><span class="badge warn">loading ±x %</span></td><td>Total AUC deviates &gt; 10 % from the median of the loaded samples</td><td>advisory for ratios (loading cancels); matters for absolute areas</td></tr>
+      <tr><td><span class="badge warn">valleys off x mm</span></td><td>after alignment this sample's g1–g3 valleys deviate &gt; 1.5 mm from the consensus</td><td>gradient differs in scale — not comparable by a shift</td></tr>
+      <tr><td><span class="badge warn">scale b …</span></td><td>shift + scale mode: the fitted factor deviates &gt; 5 % from 1</td><td>a physically different gradient — exclude rather than correct</td></tr>
+      <tr><td><span class="badge warn">rising end</span></td><td>the trace still climbs at the endpoint: heavy polysomes are truncated</td><td>report the ratio as a lower bound; consider a gradient that captures the heavy end</td></tr>
+      <tr><td><span class="badge warn">no 80S</span></td><td>no 80S peak found — landmarks and alignment unavailable</td><td>check the trace; set boundaries by hand</td></tr>
+      <tr><td><span class="badge warn">80S window?</span></td><td>a more prominent peak lies outside the 80S search window</td><td>check the gradient profile</td></tr>
+      <tr><td><span class="badge warn">short trace</span></td><td>the trace ends before the endpoint</td><td>use the common endpoint (auto-set does)</td></tr>
+      <tr><td><span class="badge warn">groups scanned one after another</span> (design line)</td><td>within a block, one group was scanned entirely after another; gradients diffuse while they wait</td><td>alternate the order in the next rotor; record scan times</td></tr></table>
   </section>
 
   <section data-tab="stats" hidden>
