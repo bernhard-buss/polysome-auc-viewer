@@ -8,8 +8,38 @@
   * { box-sizing: border-box; }
   body { font: 14px/1.45 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: var(--fg);
          margin: 0; padding: 18px 22px; background: #fafbfc; }
-  h1 { font-size: 20px; margin: 0 0 2px; }
-  .sub { color: var(--muted); margin-bottom: 14px; }
+  header.hdr { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 4px 16px;
+               margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+  h1 { font-size: 20px; margin: 0; display: inline; }
+  .ver { font-size: 12.5px; color: var(--muted); margin-left: 10px; }
+  .hl2 { color: var(--accent); text-decoration: none; font-weight: 600; }
+  .ptitle { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
+  .ptitle .pnum { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700;
+                  display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .ptitle h2 { font-size: 15px; margin: 0; }
+  .ptitle .tbar { margin-left: auto; }
+  .tbar { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
+  .tbar .lab { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-right: 2px; }
+  .tbar .sep { width: 1px; height: 18px; background: var(--line); margin: 0 4px; }
+  body:not(.hasdata) .needsdata { display: none; }
+  .empty { border: 1px dashed var(--line); border-radius: 8px; padding: 28px; text-align: center; color: var(--muted); }
+  table.stbl { width: auto; font-size: 12.5px; margin-top: 10px; }
+  table.stbl th, table.stbl td { padding: 4px 9px; text-align: left; white-space: nowrap; }
+  table.stbl input { padding: 1px 4px; border: 1px solid var(--line); border-radius: 3px; font-size: 12px; }
+  table.stbl tr.excl td { opacity: .55; }
+  .chip { display: inline-block; padding: 1px 7px; border-radius: 999px; background: #f1f4f7; font-size: 11.5px; color: #334; margin: 2px 3px 2px 0; white-space: nowrap; }
+  .chip b { color: var(--muted); font-weight: 600; margin-right: 3px; }
+  .chip.sep { background: none; padding: 0 2px; color: #bbb; }
+  .badge.warn { background: #fff1e6; color: #a04000; }
+  .badge.ok { background: #e6f2ea; color: #2a7a2a; }
+  .qcs { display: flex; flex-wrap: wrap; gap: 3px; }
+  details.cl { margin-top: 6px; } details.cl summary { cursor: pointer; list-style: none; font-size: 12.5px; color: #334; }
+  details.cl summary::-webkit-details-marker { display: none; }
+  details.cl summary::before { content: "▸ "; color: var(--muted); } details.cl[open] summary::before { content: "▾ "; }
+  #results th { font-size: 12px; } #results td { padding: 5px 8px; }
+  #results td:first-child { white-space: nowrap; }
+  footer { margin-top: 18px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); display: flex; gap: 16px; flex-wrap: wrap; }
+  footer a { color: var(--accent); text-decoration: none; }
   .panel { background:#fff; border:1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
   #drop { border: 2px dashed #b6c2cc; border-radius: 8px; padding: 18px; text-align: center; color: var(--muted);
           cursor: pointer; transition: background .15s; }
@@ -96,21 +126,32 @@
 </style>
 </head>
 <body>
-<h1>Polysome AUC Viewer</h1>
-<div class="sub"><b id="ver"></b><a class="hl" href="#help" data-help="changelog" title="Help: changelog">ⓘ</a> · Load BioComp Triax FlowCell exports (<code>.csv</code>) or plain two-column position/OD files
-(<code>.txt</code>/<code>.csv</code>). Everything runs locally in your browser — no data leaves this page.</div>
+<header class="hdr">
+  <div><h1>Polysome AUC Viewer</h1><span class="ver"><b id="ver"></b><a class="hl" href="#help" data-help="changelog" title="Help: changelog">ⓘ</a></span></div>
+  <div class="note">BioComp Triax exports or two-column position/OD files · everything runs in your browser, no data leaves this page ·
+    <a class="hl2" href="#help" data-help="start">Help</a></div>
+</header>
 
 <div class="panel">
+  <div class="ptitle"><span class="pnum">1</span><h2>Samples</h2>
+    <div class="tbar"><span class="lab">Session</span>
+      <button id="sessload" title="Restore a saved session; load the same CSV files again, their metadata is re-applied by sample name">Load</button>
+      <button id="sesssave" title="Save boundaries, settings, profile, sample metadata, contrasts and lock state as a small JSON file (no trace data)">Save</button>
+      <button id="sessshare" title="Copy a link that restores this session's settings and sample metadata (no trace data); the recipient loads the same CSV files">Share link</button>
+      <input type="file" id="sessin" accept=".json" style="display:none"><a class="hl" href="#help" data-help="files" title="Help: session files">ⓘ</a>
+      <span class="sep"></span><button id="clearall">Clear all</button></div>
+  </div>
   <div id="drop">
-    <b>Drop files here</b> or click to choose (multiple allowed)
+    <b>Drop files here</b> or click to choose (multiple allowed) — one instrument export per sample; add an empty-gradient run as blank if you have one
     <input id="finput" type="file" multiple accept=".csv,.txt">
   </div>
+  <div id="sessline" class="sessline"></div>
   <div class="traces" id="tracelist"></div>
   <div class="warn" id="filewarn"></div>
-  <div style="margin-top:8px"><button id="clearall">Clear all loaded files</button></div>
 </div>
 
-<div class="panel">
+<div class="panel needsdata">
+  <div class="ptitle"><span class="pnum">2</span><h2>Regions &amp; processing</h2></div>
   <div class="ctl">
     <fieldset class="fs"><legend>Regions (aligned mm)</legend>
       <div class="fgrid">
@@ -171,40 +212,31 @@
     Small ticks in each sample's colour mark its own peaks (top) and valleys (bottom).</div>
 </div>
 
-<div class="panel">
+<div class="panel needsdata">
+  <div class="ptitle"><span class="pnum">3</span><h2>Results</h2>
+    <div class="tbar"><span class="lab">Download</span>
+      <button id="dl">CSV</button><button id="dltidy" title="Long format (sample × metric) with block, group, scan time, exclusion and the sensitivity range — the input for statistics">Tidy CSV</button><button id="dlx">Excel</button>
+      <a class="hl" href="#help" data-help="files" title="Help: files &amp; export">ⓘ</a>
+      <span class="sep"></span><button id="lockbtn">Lock settings</button><span id="lockinfo" class="note"></span></div>
+  </div>
   <table id="results"><thead>
     <tr><th data-s="name">Sample</th><th data-s="tot">Total AUC</th><th data-s="rib">Ribosomal AUC</th><th data-s="aucM">AUC monosome</th><th data-s="aucP">AUC polysomes</th><th data-s="mp">Mono / Poly</th><th data-s="pm">Poly / Mono</th><th data-s="l2">log2 (Poly / Mono)</th><th data-s="off">x-shift (mm)</th><th data-s="blv">Baseline</th><th data-s="qcn" data-help="qc">QC</th></tr>
   </thead><tbody></tbody></table>
   <div id="ext"></div>
   <div id="sens" class="note"></div>
-  <div style="margin-top:10px">
-    <button id="dl">Download results as CSV</button>
-    <button id="dlx">Export to Excel (.xlsx)</button>
-    <a class="hl" href="#help" data-help="files" title="Help: files &amp; export">ⓘ</a>
-    <span class="note" style="margin-left:8px">What each column, flag and export contains: see <b>Help</b> at the bottom of the page.</span>
-  </div>
 </div>
 
-<div class="panel">
-  <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
-    <b>Design &amp; contrasts</b><a class="hl" href="#help" data-help="stats" title="Help: sensitivity &amp; contrasts">ⓘ</a>
-    <label>contrasts <input type="text" id="contrasts_in" size="44" placeholder="e.g. KO_CON vs PT_CON; KO_MG vs PT_MG"></label>
-    <button id="lockbtn">Lock settings</button><span id="lockinfo" class="note"></span>
-    <button id="dltidy">Download tidy table (CSV)</button>
-    <span style="border-left:1px solid var(--line);height:20px"></span>
-    <button id="sesssave" title="Save boundaries, settings, profile, sample metadata, contrasts and lock state as a small JSON file (no trace data)">Save session</button>
-    <button id="sessload" title="Restore a saved session; load the same CSV files again, their metadata is re-applied by sample name">Load session</button>
-    <button id="sessshare" title="Copy a link that restores this session's settings and sample metadata (no trace data); the recipient loads the same CSV files">Share session</button>
-    <input type="file" id="sessin" accept=".json" style="display:none"><a class="hl" href="#help" data-help="files" title="Help: session files">ⓘ</a>
+<div class="panel needsdata">
+  <div class="ptitle"><span class="pnum">4</span><h2>Design &amp; statistics</h2><a class="hl" href="#help" data-help="stats" title="Help: sensitivity &amp; contrasts">ⓘ</a>
+    <div class="tbar"><label class="dim">contrasts <input type="text" id="contrasts_in" size="40" placeholder="e.g. KO_CON vs PT_CON; KO_MG vs PT_MG"></label></div>
   </div>
-  <div id="sessline" class="sessline"></div>
   <div id="design" class="note"></div>
   <div id="contrasts"></div>
   <div id="scale"></div>
 </div>
 
 <div class="panel help" id="help">
-  <div><b style="font-size:15px">Help</b></div>
+  <div class="ptitle"><span class="pnum">?</span><h2>Help</h2></div>
   <div class="tabs" style="margin-top:8px">
     <button data-tab="start" class="active">Quick start</button>
     <button data-tab="pipeline">Pipeline &amp; landmarks</button>
@@ -348,6 +380,9 @@
   </section>
 </div>
 
+<footer><span>Polysome AUC Viewer <span id="ver2"></span></span><span>MIT License · © 2026 ETH Zurich</span>
+  <a href="https://github.com/bernhard-buss/polysome-auc-viewer" target="_blank" rel="noopener">Source on GitHub</a></footer>
+
 <script>
 "use strict";
 /* ---------------- parsing ---------------- */
@@ -356,7 +391,7 @@ const COLORS = ["#e41a1c","#377eb8","#4daf4a","#984ea3","#ff7f00","#a65628",
 // Bump for every change that affects computed numbers (landmarks, baselines, boundaries,
 // integration, QC thresholds); documentation/layout-only changes do not bump it. See CHANGELOG.md.
 const VERSION = "1.2";
-document.getElementById("ver").textContent = "v" + VERSION;
+document.getElementById("ver").textContent = "v" + VERSION; document.getElementById("ver2").textContent = "v" + VERSION;
 let traces = [];           // {name, x[], y[], yc[], spikes[], visible, color, file, off}
 let bounds = { t0: null, m1: null, m2: null, p3: null, h: null };
 // Gradient profile: the geometry the landmark search assumes. Editable in the
@@ -908,7 +943,8 @@ let dragKey = null, xZoom = null, zoomDrag = null, chartScale = null;
 function render() {
   const wrap = document.getElementById("chartwrap");
   const vis = traces.filter(t => t.visible);
-  if (!vis.length) { wrap.innerHTML = ""; renderTable(); return; }
+  document.body.classList.toggle("hasdata", traces.some(t => !t.blank));
+  if (!vis.length) { wrap.innerHTML = `<div class="empty">No visible samples — tick samples in the list above.</div>`; renderTable(); return; }
   prepare();
   if (autoMode) autoBounds();
   const xminD = Math.min(...vis.map(t => px_(t, 0)));
@@ -1072,15 +1108,18 @@ const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true
 
 function renderTraceList() {
   const order = traces.map((t, i) => ({ t, i })).sort((a, b) => byName(a.t, b.t));
-  document.getElementById("tracelist").innerHTML = order.map(({ t, i }) => {
-    const m = t.meta || {};
-    return `<div class="row${m.excl ? " excl" : ""}"><label><input type="checkbox" data-i="${i}" ${t.visible ? "checked" : ""} ${t.blank ? "disabled" : ""}>` +
-    `<span class="swatch" style="background:${t.color}"></span>${esc(t.name)}${t.blank ? " <b>(blank)</b>" : ""}` +
-    `<span style="color:#99a">(${t.x.length} pts${t.scan ? ", scanned " + esc(t.scan) : ""})</span></label>` +
-    (t.blank ? "" : `<span class="meta">block <input data-m="block" data-i="${i}" size="3" value="${esc(m.block || "")}"> ` +
-    `group <input data-m="group" data-i="${i}" size="9" value="${esc(m.group || "")}"> ` +
-    `A260 <input data-m="a260" data-i="${i}" size="5" value="${Number.isFinite(m.a260) ? m.a260 : ""}"> ` +
-    `exclude <input data-m="excl" data-i="${i}" size="14" placeholder="reason (QC)" value="${esc(m.excl || "")}"></span>`) + `</div>`; }).join("");
+  const el = document.getElementById("tracelist");
+  if (!order.length) { el.innerHTML = ""; }
+  else el.innerHTML = `<table class="stbl"><thead><tr><th></th><th>Sample</th><th>Points</th><th>Scanned</th><th>Block</th><th>Group</th><th>Loaded A260</th><th>Exclude (QC reason)</th></tr></thead><tbody>` +
+    order.map(({ t, i }) => { const m = t.meta || {};
+      return `<tr class="${m.excl ? "excl" : ""}"><td><input type="checkbox" data-i="${i}" ${t.visible ? "checked" : ""} ${t.blank ? "disabled" : ""} title="show / hide"></td>` +
+        `<td><span class="swatch" style="background:${t.color};vertical-align:-2px"></span> ${esc(t.name)}${t.blank ? ' <span class="badge">blank</span>' : ""}</td>` +
+        `<td>${t.x.length}</td><td class="dim">${esc(t.scan || "—")}</td>` +
+        (t.blank ? `<td colspan="4" class="dim">subtracted from every sample</td>` :
+        `<td><input data-m="block" data-i="${i}" size="3" value="${esc(m.block || "")}"></td>` +
+        `<td><input data-m="group" data-i="${i}" size="10" value="${esc(m.group || "")}"></td>` +
+        `<td><input data-m="a260" data-i="${i}" size="5" value="${Number.isFinite(m.a260) ? m.a260 : ""}"></td>` +
+        `<td><input data-m="excl" data-i="${i}" size="18" placeholder="keep" value="${esc(m.excl || "")}"></td>`) + `</tr>`; }).join("") + `</tbody></table>`;
   document.querySelectorAll("#tracelist input[type=checkbox]").forEach(cb =>
     cb.addEventListener("change", e => { traces[+e.target.dataset.i].visible = e.target.checked; render(); }));
   document.querySelectorAll("#tracelist input[data-m]").forEach(inp =>
@@ -1119,7 +1158,7 @@ function renderTable() {
     `<td class="ratio" title="± noise-propagated 1σ (random noise + a one-sigma baseline offset); range = min–max over the sensitivity grid under the current baseline">${f3(r.mp)}` +
       `<span class="sub2">${Number.isFinite(r.mpSd) ? "± " + r.mpSd.toFixed(3) : ""}${rng[r.key] ? " · " + f3(rng[r.key][0]) + "–" + f3(rng[r.key][1]) : ""}</span></td><td>${f3(r.pm)}</td><td>${f3(r.l2)}</td>` +
     `<td>${r.off ? r.off.toFixed(2) : "0"}${r.scale !== 1 ? `<span class="sub2" style="display:block;font-size:10.5px;color:#778;font-weight:400">× ${r.scale.toFixed(3)}</span>` : ""}${Math.abs(r.off) >= 2 ? ' <span title="x-shift ≥ 2 mm — harmless if the valleys agree after alignment (see QC)">⚠</span>' : ""}</td>` +
-    `<td>${r.bl}</td><td style="text-align:left;font-size:12px;color:${r.qcn ? "#a04000" : "#667"}">${esc(r.qc.join("; "))}</td></tr>`).join("");
+    `<td>${r.bl}</td><td style="text-align:left"><div class="qcs">${r.qc.length ? r.qc.map(qcBadge).join("") : '<span class="badge ok">ok</span>'}</div></td></tr>`).join("");
   const bs = document.getElementById("bstate");
   bs.textContent = bounds.m1 == null ? "" : autoMode ? "auto · from landmarks" : "manual";
   bs.classList.toggle("auto", autoMode);
@@ -1130,8 +1169,25 @@ function renderTable() {
   scheduleAutosave();
 }
 
+const clState = {};
+function clOpen(id) { if (id in clState) return clState[id]; try { clState[id] = localStorage.getItem("pav_cl_" + id) === "1"; } catch (e) { clState[id] = false; } return clState[id]; }
+function collapsible(id, summary, body) {
+  return `<details class="cl" data-cl="${id}"${clOpen(id) ? " open" : ""}><summary>${summary}</summary><div>${body}</div></details>`;
+}
+document.addEventListener("toggle", e => {
+  const d = e.target; if (!(d instanceof HTMLDetailsElement) || !d.dataset.cl) return;
+  clState[d.dataset.cl] = d.open; try { localStorage.setItem("pav_cl_" + d.dataset.cl, d.open ? "1" : "0"); } catch (err) {}
+}, true);
 let extOpen = false;
 try { extOpen = localStorage.getItem("pav_ext_open") === "1"; } catch (e) {}
+const QC_SHORT = [[/^spike ×(\d+)/, m => `spike ×${m[1]}`], [/^negative OD/, () => "negative OD"], [/^negative area/, () => "negative area"],
+  [/^loading ([+-]?\d+)%/, m => `loading ${m[1]} %`], [/^valleys off by ([\d.]+)/, m => `valleys off ${m[1]} mm`], [/^fitted scale b = ([\d.]+)/, m => `scale b ${m[1]}`],
+  [/^still rising/, () => "rising end"], [/^no 80S/, () => "no 80S"], [/^a more prominent/, () => "80S window?"], [/^trace does not cover/, () => "short trace"]];
+function qcBadge(q) {
+  const warn = q.startsWith("⚠"), text = q.replace(/^⚠\s*/, ""); let lab = text;
+  for (const [re, f] of QC_SHORT) { const m = text.match(re); if (m) { lab = f(m); break; } }
+  return `<span class="badge${warn ? " warn" : ""}" title="${esc(text).replace(/"/g, "&quot;")}">${esc(lab)}</span>`;
+}
 function renderExtended(rows) {
   const el = document.getElementById("ext");
   if (!rows.length) { el.innerHTML = ""; return; }
@@ -1237,14 +1293,17 @@ function scalePairs(rows) {
 function renderScale(rows) {
   const el = document.getElementById("scale");
   if (rows.length < 2) { el.innerHTML = ""; return; }
-  const P = scalePairs(rows);
-  let h = `<div style="margin-top:10px"><b>Scale test</b>${HELP_ICON("stats")} — A ≈ c·B over the integration window; residual as % of A's RMS: ≤ 10 % loading-only, > 25 % real shape difference</div>` +
-    `<div style="overflow-x:auto"><table style="margin-top:4px;font-size:12px"><thead><tr><th>A</th><th>B</th><th>c</th><th>residual</th><th></th></tr></thead><tbody>`;
-  for (const p of P) h += `<tr><td style="text-align:left">${esc(p.a)}</td><td style="text-align:left">${esc(p.b)}</td><td>${p.c.toFixed(2)}</td><td>${(p.res * 100).toFixed(0)} %</td>` +
+  const P = scalePairs(rows), shape = P.filter(p => p.res > 0.25), mod = P.filter(p => p.res > 0.10 && p.res <= 0.25);
+  const head = `<div style="margin-top:12px"><b>Scale test</b>${HELP_ICON("stats")} <span class="dim">— A ≈ c·B over the integration window; residual ≤ 10 % = loading-only, &gt; 25 % = real shape difference</span></div>` +
+    `<div style="margin-top:4px">${P.length} pairs: ` +
+    (shape.length ? `<span class="badge warn">${shape.length} with a shape difference</span> <span class="dim">${shape.map(p => `${esc(p.a)} vs ${esc(p.b)} (${(p.res * 100).toFixed(0)} %)`).join("; ")}</span>` : `<span class="badge ok">no shape differences</span>`) +
+    (mod.length ? ` <span class="badge">${mod.length} moderate</span>` : "") + `</div>`;
+  let body = `<div style="overflow-x:auto"><table style="margin-top:4px;font-size:12px"><thead><tr><th>A</th><th>B</th><th>c</th><th>residual</th><th></th></tr></thead><tbody>`;
+  for (const p of P) body += `<tr><td style="text-align:left">${esc(p.a)}</td><td style="text-align:left">${esc(p.b)}</td><td>${p.c.toFixed(2)}</td><td>${(p.res * 100).toFixed(0)} %</td>` +
     `<td style="text-align:left;color:${p.res > 0.25 ? "#a04000" : p.res > 0.10 ? "#7a5a00" : "#2a7a2a"}">${p.res > 0.25 ? "shape difference" : p.res > 0.10 ? "moderate" : "loading-only"}</td></tr>`;
-  el.innerHTML = h + `</tbody></table></div>`;
+  el.innerHTML = head + collapsible("scale", "all pairs", body + `</tbody></table></div>`);
 }
-// design QC: scan order within each block vs group (confounding), sitting-time spread
+
 function renderDesign(rows) {
   const el = document.getElementById("design"), out = [];
   const blocks = [...new Set(rows.map(r => r.meta.block || ""))].filter(Boolean).sort();
@@ -1392,13 +1451,16 @@ function renderLandmarkLine() {
   const sc = traces.filter(t => t.visible && !t.blank && Number.isFinite(t.scale) && t.scale !== 1).map(t => t.scale);
   const alignTxt = document.getElementById("alignx").checked
     ? (document.getElementById("alignmode").value === "affine" && sc.length ? `shift + scale (b ${Math.min(...sc).toFixed(3)}–${Math.max(...sc).toFixed(3)})` : "shift only") : "off";
-  el.innerHTML = `<b>Landmarks (aligned, consensus of ${traces.filter(t => t.visible && !t.blank && t.lm && t.lm.x80 != null).length} samples; alignment: ${alignTxt}):</b>${HELP_ICON("pipeline")} ` +
-    `first-peak onset ${f(g.t0)} · 40S ${f(g.x40)} · 60S ${f(g.x60)} · 80S ${f(g.x80)} mm; valleys g1 ${f(g.g1)} · g2 ${f(g.g2)} · g3 ${f(g.g3)} · g4 ${f(g.g4)} mm; ` +
-    `polysomes 2× ${f(g.n2)} · 3× ${f(g.n3)} · 4× ${f(g.n4)}${g.n5 != null ? " · 5× " + f(g.n5) : ""} mm (valleys 2|3 ${f(g.v23)} · 3|4 ${f(g.v34)}${g.v45 != null ? " · 4|5 " + f(g.v45) : ""}); ` +
-    `common endpoint ${f(g.end)} mm. Valley spread across samples: g1 ${f(g.g1_spread)} · g2 ${f(g.g2_spread)} · g3 ${f(g.g3_spread)} · g4 ${f(g.g4_spread)} mm — ` +
-    (g.pureOffset ? `<span style="color:#2a7a2a">✓ every sample's g1–g3 valleys sit within ${LM_TOL} mm of the consensus: the x-shifts are a pure offset, the gradients are equivalent.</span>`
-                  : `<span style="color:#a04000">⚠ at least one sample's g1–g3 valleys deviate by more than ${LM_TOL} mm from the consensus: that gradient differs in scale; a single shift cannot align it (see QC).</span>`) +
-    ` (g4 is a broad minimum on an unresolved ladder and is excluded from this test.)`;
+  const nS = traces.filter(t => t.visible && !t.blank && t.lm && t.lm.x80 != null).length;
+  const chip = (k, v) => v == null ? "" : `<span class="chip"><b>${k}</b>${f(v)}</span>`;
+  const sep = `<span class="chip sep">·</span>`;
+  el.innerHTML = `<div style="margin-bottom:4px"><b>Landmarks</b> <span class="dim">(aligned mm · consensus of ${nS} samples · alignment: ${alignTxt})</span>${HELP_ICON("pipeline")}</div>` +
+    chip("onset", g.t0) + chip("40S", g.x40) + chip("60S", g.x60) + chip("80S", g.x80) + sep +
+    chip("2×", g.n2) + chip("3×", g.n3) + chip("4×", g.n4) + chip("5×", g.n5) + sep +
+    chip("g1", g.g1) + chip("g2", g.g2) + chip("g3", g.g3) + chip("g4", g.g4) + chip("2|3", g.v23) + chip("3|4", g.v34) + chip("4|5", g.v45) + sep +
+    chip("end", g.end) + ` ` +
+    (g.pureOffset ? `<span class="badge ok" title="every sample's g1–g3 valleys sit within ${LM_TOL} mm of the consensus (spread g1 ${f(g.g1_spread)} · g2 ${f(g.g2_spread)} · g3 ${f(g.g3_spread)} mm); g4 (spread ${f(g.g4_spread)}) is a broad minimum and excluded from the test">✓ pure offset — gradients equivalent</span>`
+                  : `<span class="badge warn" title="at least one sample's g1–g3 valleys deviate by more than ${LM_TOL} mm from the consensus; that gradient differs in scale and a single shift cannot align it (see QC)">⚠ a gradient differs in scale</span>`);
 }
 
 const SENS_VARIANTS = [["base",0,0,0],["m2 −2",0,-2,0],["m2 −1",0,-1,0],["m2 +1",0,1,0],["m2 +2",0,2,0],
@@ -1433,23 +1495,22 @@ function renderSensitivity(S) {
   if (!S || S.keys.length < 2) { el.innerHTML = ""; return; }
   const f = v => Number.isFinite(v) ? v.toFixed(3) : "—";
   const MODEL = { min: "flat minimum", g3: "flat at the 60S|80S valley", chord: "chord", anchors: "anchors", none: "none" };
-  let h = `<div style="margin-top:12px"><b>Boundary / baseline sensitivity</b>${HELP_ICON("stats")} — Mono / Poly recomputed with the mono|poly boundary moved ±1–2 mm and ` +
-          `the endpoint pulled back 4–16 mm, under two baseline models. Stable sample ranking = you are measuring the samples; flips = the setting.</div>`;
+  let head = `<div style="margin-top:12px"><b>Boundary / baseline sensitivity</b>${HELP_ICON("stats")} <span class="dim">— Mono / Poly with the mono|poly boundary moved ±1–2 mm and the endpoint pulled back 4–16 mm, under two baseline models</span></div>`;
+  let body = "";
   for (const B of S.blocks) {
-    h += `<div style="margin-top:6px"><b>${MODEL[B.model] || B.model}</b>: ` +
-      (B.flips.length ? `<span style="color:#a04000">⚠ ranking changes under: ${B.flips.join(", ")}</span>`
-                      : `<span style="color:#2a7a2a">✓ ranking identical under all ${B.cols.length - 1} perturbations</span>`) +
-      (B.invalid ? ` <span style="color:#a04000">(negative areas — this baseline sits above the data for some samples; not admissible)</span>` : "") + `</div>`;
-    h += `<div style="overflow-x:auto"><table style="margin-top:4px;font-size:12px"><thead><tr><th>Sample</th>` +
-         B.cols.map(c => `<th>${c.lab}</th>`).join("") + `<th>min – max</th></tr></thead><tbody>`;
+    head += `<div style="margin-top:4px"><span class="dim">${MODEL[B.model] || B.model}:</span> ` +
+      (B.flips.length ? `<span class="badge warn">⚠ ranking changes under ${B.flips.join(", ")}</span>` : `<span class="badge ok">✓ ranking stable under all ${B.cols.length - 1} perturbations</span>`) +
+      (B.invalid ? ` <span class="badge warn" title="negative areas: this baseline sits above the data for some samples">not admissible</span>` : "") + `</div>`;
+    body += `<div style="margin-top:8px"><b>${MODEL[B.model] || B.model}</b></div><div style="overflow-x:auto"><table style="margin-top:4px;font-size:12px"><thead><tr><th>Sample</th>` +
+      B.cols.map(c => `<th>${c.lab}</th>`).join("") + `<th>min – max</th></tr></thead><tbody>`;
     for (const k of S.keys) {
       const vs = B.cols.filter(c => c.ok).map(c => c.vals[k]).filter(Number.isFinite);
-      h += `<tr><td>${esc(B.cols[0].names[k] || "")}</td>` + B.cols.map(c => `<td>${c.ok ? f(c.vals[k]) : "—"}</td>`).join("") +
-           `<td>${f(Math.min(...vs))} – ${f(Math.max(...vs))}</td></tr>`;
+      body += `<tr><td>${esc(B.cols[0].names[k] || "")}</td>` + B.cols.map(c => `<td>${c.ok ? f(c.vals[k]) : "—"}</td>`).join("") +
+              `<td>${f(Math.min(...vs))} – ${f(Math.max(...vs))}</td></tr>`;
     }
-    h += `</tbody></table></div>`;
+    body += `</tbody></table></div>`;
   }
-  el.innerHTML = h;
+  el.innerHTML = head + collapsible("sens", "full sensitivity tables", body);
 }
 
 document.querySelectorAll("#results thead th").forEach(th =>
@@ -1526,6 +1587,7 @@ document.getElementById("clearall").addEventListener("click", () => {
   try { localStorage.removeItem("pav_session"); } catch (e) {}
   document.getElementById("sessline").textContent = "";
   bounds = { t0: null, m1: null, m2: null, p3: null, h: null }; landmarks = null; autoMode = false;
+  document.body.classList.remove("hasdata");
   ["t0","m1","m2","p3","h","anchors"].forEach(k => document.getElementById(k).value = "");
   document.getElementById("lmline").innerHTML = ""; document.getElementById("ext").innerHTML = "";
   ["design", "contrasts", "scale"].forEach(id => document.getElementById(id).innerHTML = "");
