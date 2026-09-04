@@ -21,4 +21,4 @@ updates the public URL within about a minute. To work on it locally, open
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Copyright (c) 2026 Bernhard Buss, ETH Zurich.
+MIT — see [LICENSE](LICENSE). Copyright (c) 2026 ETH Zurich.
