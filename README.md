@@ -6,11 +6,15 @@ A single-file, dependency-free browser tool for polysome profiles exported from 
 BioComp Gradient Station / Triax flow cell (`.csv`) or plain two-column position/OD
 files. Everything runs locally in your browser — **no data leaves the page**.
 
-Features: drag-to-set monosome/polysome regions, three baseline modes (+ anchored
-piecewise-linear), per-run alignment at the 80S peak, spike (bubble) detection and
-removal, outcome-independent QC flags, boundary-sensitivity check, Mono/Poly,
-Poly/Mono and log2 ratios, optional heavy-polysome fraction, CSV and Excel export
-(native charts).
+Features: automatic landmarks (free-RNA peak, 40S/60S/80S, polysome peaks, valleys) on a
+Savitzky-Golay-smoothed, despiked trace; alignment at the 80S with a pure-offset check;
+rule-based boundaries (valley-to-valley) with a common endpoint; blank-gradient
+subtraction; region-specific baselines; Total AUC (loading), Mono/Poly, Poly/Mono, log2,
+polysome fraction, A40/A60, free-subunit fraction, molar 40S:60S, optional heavy fraction;
+outcome-independent QC flags (spikes, negative OD/area, loading, gradient scale, rising
+end, non-linear first peak, scan-order confounding); boundary × baseline sensitivity grid;
+per-block contrasts with a paired t; pairwise scale test; settings lock with hash; CSV,
+tidy CSV and Excel export (native charts).
 
 ## Development
 
