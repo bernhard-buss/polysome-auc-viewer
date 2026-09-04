@@ -21,7 +21,7 @@
   .traces .meta input { padding: 1px 3px; border: 1px solid var(--line); border-radius: 3px; font-size: 11.5px; }
   .traces .row { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; padding: 3px 0; border-bottom: 1px dotted var(--line); }
   .traces .row.excl { opacity: 0.55; }
-  .locked .controls input, .locked .controls select, .locked .controls button, .locked .traces input { pointer-events: none; opacity: 0.6; }
+  .locked .ctl input, .locked .ctl select, .locked .ctl button, .locked .traces input { pointer-events: none; opacity: 0.6; }
   .swatch { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
   .controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
   .controls .grp { display: flex; align-items: center; gap: 6px; }
@@ -42,6 +42,23 @@
   .warn { color: #a04000; font-size: 12.5px; margin-top: 6px; }
   .legendline { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
   b.mono { color: var(--mono); } b.poly { color: var(--poly); }
+  .ctl { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: stretch; margin-bottom: 8px; }
+  fieldset.fs { border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px 10px; margin: 0; min-width: 0; }
+  fieldset.fs legend { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; padding: 0 5px; }
+  .fgrid { display: grid; grid-template-columns: auto auto; gap: 7px 12px; align-items: center; }
+  .fgrid input[type=number], .frow input[type=text] { width: 68px; padding: 3px 5px; border: 1px solid var(--line); border-radius: 4px; }
+  .frow input[type=text] { width: 150px; }
+  .lbl { font-weight: 600; white-space: nowrap; }
+  .lbl.heavy { color: #984ea3; }
+  .dim { color: var(--muted); font-size: 12px; }
+  .fact { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .badge { font-size: 11.5px; padding: 2px 9px; border-radius: 999px; background: #eef2f5; color: #556; }
+  .badge.auto { background: #e6f2ea; color: #2a7a2a; }
+  .frow { display: flex; align-items: center; gap: 8px; margin: 4px 0 6px; }
+  .frow[hidden] { display: none; }
+  .frow select { padding: 3px 5px; border: 1px solid var(--line); border-radius: 4px; max-width: 300px; }
+  .frow .lbl { min-width: 96px; }
+  label.chk { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; cursor: pointer; }
   a.hl { text-decoration: none; color: #9ab; font-size: 12px; margin-left: 4px; vertical-align: 1px; cursor: pointer; }
   a.hl:hover { color: var(--accent); }
   /* help panel */
@@ -63,6 +80,7 @@
   .help .tip { background: #eef6fb; border-left: 3px solid var(--accent); padding: 6px 10px; margin: 8px 0; border-radius: 0 4px 4px 0; }
   .help .warn2 { background: #fff4ec; border-left: 3px solid #e6550d; padding: 6px 10px; margin: 8px 0; border-radius: 0 4px 4px 0; }
   .help code { background: #f0f2f4; padding: 0 4px; border-radius: 3px; }
+  .help h4 { font-size: 13px; margin: 12px 0 4px; }
 </style>
 </head>
 <body>
@@ -81,45 +99,47 @@
 </div>
 
 <div class="panel">
-  <div class="controls">
-    <div class="grp"><b style="color:#667">Total AUC</b>
-      <label>from <input type="number" id="t0" step="0.1" placeholder="auto"> mm</label>
-      <span class="note">(onset of the very first peak — the free-RNA peak; excludes only the start artefacts before it)</span><a class="hl" href="#help" data-help="pipeline" title="Help: pipeline &amp; landmarks">ⓘ</a>
-    </div>
-    <div class="grp"><b class="mono">Monosome</b>
-      <label>from <input type="number" id="m1" step="0.1"> mm</label>
-      <label>to <input type="number" id="m2" step="0.1"> mm</label>
-    </div>
-    <div class="grp"><b class="poly">Polysomes</b>
-      <label>to <input type="number" id="p3" step="0.1"> mm</label>
-      <span class="note">(start = monosome end)</span>
-    </div>
-    <div class="grp"><b style="color:#984ea3">Heavy (≥4-mer)</b>
-      <label>from <input type="number" id="h" step="0.1" placeholder="off"> mm</label>
-      <span class="note">(optional; needs a resolved ladder)</span><a class="hl" href="#help" data-help="metrics" title="Help: metrics">ⓘ</a>
-    </div>
-    <div class="grp"><label>Baseline
-      <select id="bmode">
-        <option value="min" selected>flat — minimum inside regions</option>
-        <option value="chord">linear — between curve at region edges</option>
-        <option value="anchors">piecewise linear — through curve at anchors</option>
-        <option value="none">none (raw)</option>
-      </select></label>
-      <label id="anchorsgrp" hidden>anchors (mm) <input type="text" id="anchors" size="22" placeholder="e.g. 25, 40, 74"></label><a class="hl" href="#help" data-help="baseline" title="Help: baselines">ⓘ</a>
-    </div>
-    <div class="grp"><label><input type="checkbox" id="cropy" checked> fit y-axis to the mono/poly regions (display only)</label></div>
-    <div class="grp"><label><input type="checkbox" id="alignx" checked> align traces at the 80S peak (reference 32.0 mm)</label><a class="hl" href="#help" data-help="pipeline" title="Help: alignment">ⓘ</a></div>
-    <div class="grp"><label>Blank gradient <select id="blank"><option value="">none</option></select></label>
-      <span class="note">(empty-gradient run, subtracted from every sample)</span><a class="hl" href="#help" data-help="baseline" title="Help: blank subtraction">ⓘ</a></div>
-    <div class="grp"><button id="autob" title="Set the boundaries from the detected valleys: total from g1 (void|40S), monosome g3 (60S|80S) to g4 (80S|polysomes), polysomes to the common endpoint">Auto-set boundaries from landmarks</button><a class="hl" href="#help" data-help="pipeline" title="Help: boundary rule">ⓘ</a></div>
-    <div class="grp"><label><input type="checkbox" id="despike"> remove spikes inside the regions (bubbles; Hampel filter)</label><a class="hl" href="#help" data-help="qc" title="Help: QC flags">ⓘ</a></div>
+  <div class="ctl">
+    <fieldset class="fs"><legend>Regions (aligned mm)</legend>
+      <div class="fgrid">
+        <span class="lbl" style="color:#667" title="Onset of the very first (free-RNA) peak; excludes only the start artefacts before it">Total AUC from</span>
+        <span><input type="number" id="t0" step="0.1" placeholder="auto"><a class="hl" href="#help" data-help="pipeline" title="Help: pipeline &amp; landmarks">ⓘ</a></span>
+        <span class="lbl mono" title="80S region: from the 60S|80S valley (g3) to the 80S|polysome valley (g4)">Monosome</span>
+        <span><input type="number" id="m1" step="0.1"> <span class="dim">to</span> <input type="number" id="m2" step="0.1"></span>
+        <span class="lbl poly" title="Polysomes start at the monosome end and run to the common endpoint">Polysomes to</span>
+        <span><input type="number" id="p3" step="0.1"></span>
+        <span class="lbl heavy" title="Optional: valley between the 3-mer and 4-mer peaks; needs a resolved ladder">Heavy (≥4-mer) from</span>
+        <span><input type="number" id="h" step="0.1" placeholder="off"><a class="hl" href="#help" data-help="metrics" title="Help: metrics">ⓘ</a></span>
+      </div>
+      <div class="fact">
+        <button id="autob" title="Set the boundaries from the detected valleys: total from the first-peak onset, monosome g3 to g4, polysomes to the common endpoint">Auto-set from landmarks</button>
+        <span id="bstate" class="badge"></span>
+        <a class="hl" href="#help" data-help="pipeline" title="Help: boundary rule">ⓘ</a>
+      </div>
+    </fieldset>
+    <fieldset class="fs"><legend>Processing</legend>
+      <div class="frow"><span class="lbl">Baseline</span>
+        <select id="bmode">
+          <option value="min" selected>flat — minimum inside regions</option>
+          <option value="chord">linear — between curve at region edges</option>
+          <option value="anchors">piecewise linear — through curve at anchors</option>
+          <option value="none">none (raw)</option>
+        </select><a class="hl" href="#help" data-help="baseline" title="Help: baselines">ⓘ</a></div>
+      <div class="frow" id="anchorsgrp" hidden><span class="lbl">Anchors (mm)</span><input type="text" id="anchors" size="22" placeholder="e.g. 25, 40, 74"></div>
+      <div class="frow"><span class="lbl" title="Empty-gradient run, subtracted from every sample before anything else">Blank gradient</span>
+        <select id="blank"><option value="">none</option></select><a class="hl" href="#help" data-help="baseline" title="Help: blank subtraction">ⓘ</a></div>
+      <label class="chk"><input type="checkbox" id="alignx" checked> align samples at the 80S peak (reference 32.0 mm)<a class="hl" href="#help" data-help="pipeline" title="Help: alignment">ⓘ</a></label>
+      <label class="chk"><input type="checkbox" id="despike"> repair spikes inside the regions (bubbles)<a class="hl" href="#help" data-help="qc" title="Help: QC flags">ⓘ</a></label>
+    </fieldset>
+    <fieldset class="fs"><legend>Display</legend>
+      <label class="chk"><input type="checkbox" id="cropy" checked> fit the y-axis to the regions</label>
+      <div class="dim" style="margin-top:6px;max-width:220px">Display only — never changes the numbers.</div>
+    </fieldset>
   </div>
   <div id="chartwrap"></div>
   <div id="lmline" class="legendline"></div>
-  <div class="legendline">Drag the vertical lines to set regions:
-    <b class="mono">blue = monosome (80S)</b>, <b class="poly">orange = polysomes</b>, grey = start of the total AUC.
-    Shaded areas are what gets integrated (after baseline subtraction). Regions apply to <em>all</em> traces
-    so samples stay comparable.</div>
+  <div class="legendline">Drag the dashed lines to adjust — <b class="mono">monosome</b>, <b class="poly">polysomes</b>,
+    grey = start of the total AUC. Shaded areas are integrated after baseline subtraction; boundaries apply to every sample.</div>
 </div>
 
 <div class="panel">
@@ -158,6 +178,7 @@
     <button data-tab="qc">QC flags</button>
     <button data-tab="stats">Sensitivity &amp; contrasts</button>
     <button data-tab="files">Files &amp; export</button>
+    <button data-tab="changelog">Changelog</button>
   </div>
 
   <section data-tab="start">
@@ -261,6 +282,8 @@
     <h3>Lock settings</h3>
     <p>Freezes every analysis control and stamps a settings hash (boundaries, baseline, alignment, despiking, blank, contrasts, exclusions, QC thresholds) on the CSV, tidy CSV and Excel exports.</p>
   </section>
+
+  <section data-tab="changelog" hidden><div id="changelog"><p class="dim">Loading CHANGELOG.md…</p></div></section>
 
   <section data-tab="files" hidden>
     <h3>Input files</h3>
@@ -904,6 +927,9 @@ function renderTable() {
     `<td class="ratio">${f3(r.mp)}</td><td>${f3(r.pm)}</td><td>${f3(r.l2)}</td>` +
     `<td>${r.off ? r.off.toFixed(2) : "0"}${Math.abs(r.off) >= 2 ? ' <span title="x-shift ≥ 2 mm — harmless if the valleys agree after alignment (see QC)">⚠</span>' : ""}</td>` +
     `<td>${r.bl}</td><td style="text-align:left;font-size:12px;color:${r.qcn ? "#a04000" : "#667"}">${esc(r.qc.join("; "))}</td></tr>`).join("");
+  const bs = document.getElementById("bstate");
+  bs.textContent = bounds.m1 == null ? "" : autoMode ? "auto · from landmarks" : "manual";
+  bs.classList.toggle("auto", autoMode);
   renderExtended(rows);
   renderLandmarkLine();
   renderSensitivity();
@@ -1514,7 +1540,35 @@ document.getElementById("dlx").addEventListener("click", () => {
 });
 
 // help tabs + contextual ⓘ links
+// minimal Markdown renderer for CHANGELOG.md (headings, paragraphs, bullets, bold/italic/code/links)
+function mdToHtml(md) {
+  const inline = s => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>").replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  let out = "", para = [], list = [];
+  const flushP = () => { if (para.length) { out += `<p>${inline(para.join(" "))}</p>`; para = []; } };
+  const flushL = () => { if (list.length) { out += `<ul>${list.map(l => `<li>${inline(l)}</li>`).join("")}</ul>`; list = []; } };
+  for (const l of md.split(/\r?\n/)) {
+    const h = l.match(/^(#{1,3})\s+(.*)/);
+    if (h) { flushP(); flushL(); if (h[1].length > 1) out += `<h${h[1].length + 1}>${inline(h[2])}</h${h[1].length + 1}>`; continue; }
+    const li = l.match(/^\s*[-*]\s+(.*)/);
+    if (li) { flushP(); list.push(li[1]); continue; }
+    if (!l.trim()) { flushP(); flushL(); continue; }
+    if (list.length && /^\s{2,}/.test(l)) { list[list.length - 1] += " " + l.trim(); continue; }
+    para.push(l.trim());
+  }
+  flushP(); flushL(); return out;
+}
+let changelogLoaded = false;
+function loadChangelog() {
+  if (changelogLoaded) return; changelogLoaded = true;
+  const el = document.getElementById("changelog");
+  fetch("CHANGELOG.md", { cache: "no-cache" }).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
+    .then(md => { el.innerHTML = mdToHtml(md); })
+    .catch(() => { el.innerHTML = `<p>The changelog is read from <code>CHANGELOG.md</code> next to this file and cannot be loaded when the page is opened from disk. ` +
+      `<a href="https://github.com/bernhard-buss/polysome-auc-viewer/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Open it on GitHub</a>.</p>`; });
+}
 function showHelp(tab, scroll) {
+  if (tab === "changelog") loadChangelog();
   document.querySelectorAll("#help .tabs button").forEach(x => x.classList.toggle("active", x.dataset.tab === tab));
   document.querySelectorAll("#help section").forEach(s => s.hidden = s.dataset.tab !== tab);
   try { localStorage.setItem("pav_help_tab", tab); } catch (e) {}
