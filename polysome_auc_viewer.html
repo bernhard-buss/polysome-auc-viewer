@@ -64,15 +64,22 @@
       <label>to <input type="number" id="p3" step="0.1"> mm</label>
       <span class="note">(start = monosome end)</span>
     </div>
+    <div class="grp"><b style="color:#984ea3">Heavy (≥4-mer)</b>
+      <label>from <input type="number" id="h" step="0.1" placeholder="off"> mm</label>
+      <span class="note">(optional; needs a resolved ladder)</span>
+    </div>
     <div class="grp"><label>Baseline
       <select id="bmode">
         <option value="min" selected>flat — minimum inside regions</option>
         <option value="chord">linear — between curve at region edges</option>
+        <option value="anchors">piecewise linear — through curve at anchors</option>
         <option value="none">none (raw)</option>
       </select></label>
+      <label id="anchorsgrp" hidden>anchors (mm) <input type="text" id="anchors" size="22" placeholder="e.g. 25, 40, 74"></label>
     </div>
     <div class="grp"><label><input type="checkbox" id="cropy" checked> fit y-axis to the mono/poly regions (display only)</label></div>
     <div class="grp"><label><input type="checkbox" id="alignx"> align traces at the monosome peak (per-run x-shift)</label></div>
+    <div class="grp"><label><input type="checkbox" id="despike"> remove spikes inside the regions (bubbles; Hampel filter)</label></div>
   </div>
   <div id="chartwrap"></div>
   <div class="legendline">Drag the vertical lines to set regions:
@@ -83,8 +90,9 @@
 
 <div class="panel">
   <table id="results"><thead>
-    <tr><th data-s="name">Sample</th><th data-s="aucM">AUC monosome</th><th data-s="aucP">AUC polysomes</th><th data-s="mp">Mono / Poly</th><th data-s="pm">Poly / Mono</th><th data-s="off">x-shift (mm)</th><th data-s="blv">Baseline</th></tr>
+    <tr><th data-s="name">Sample</th><th data-s="aucM">AUC monosome</th><th data-s="aucP">AUC polysomes</th><th data-s="mp">Mono / Poly</th><th data-s="pm">Poly / Mono</th><th data-s="l2">log2 (Poly / Mono)</th><th data-s="hf">Heavy fraction</th><th data-s="off">x-shift (mm)</th><th data-s="blv">Baseline</th><th data-s="qcn">QC</th></tr>
   </thead><tbody></tbody></table>
+  <div id="sens" class="note"></div>
   <div style="margin-top:10px">
     <button id="dl">Download results as CSV</button>
     <button id="dlx">Export to Excel (.xlsx)</button>
@@ -104,9 +112,33 @@
     to the value at the polysome end (a “chord”). Use when the background visibly drifts upward along the
     gradient (e.g. rising absorbance toward the bottom) — but note it goes negative wherever the curve dips
     below the chord.<br>
+    • <b>piecewise linear — through curve at anchors</b>: straight segments joining the curve values at the
+    anchor positions you list (flat beyond the outer anchors). Useful when the background drifts non-linearly.
+    <b>Caution:</b> anchoring at the valleys <em>between polysome peaks</em> subtracts real polysome mass — the
+    valleys of an unresolved ladder sit far above the true background, and the amount removed depends on gradient
+    resolution. For Poly/Mono totals keep anchors outside the peaks (e.g. just before the 80S and at the
+    gradient end); valley anchors are only appropriate for per-peak ladder quantification.<br>
     • <b>none</b>: integrate the raw OD. Only comparable across samples if all traces share the same offset.<br>
     The choice matters more than the integration itself — pick one, keep it for every sample in a comparison,
-    and report it (the CSV export records it).</div>
+    and report it (the CSV/Excel exports record it). The dotted line in each trace's color shows the baseline
+    actually subtracted.</div>
+  <div class="note"><b>QC column</b> (outcome-independent checks, decide exclusions <em>before</em> looking at ratios):
+    <b>spike</b> — a flow-cell bubble/particle: a 1–3-sample excursion &gt; 10 robust σ from the local median inside
+    the window (marked ▼ on the chart; “remove spikes” replaces it by the local median and states so);
+    <b>negative OD</b> inside the window (baseline/blank problem); <b>loading</b> — total corrected area (mono+poly)
+    deviating &gt; 10 % from the median of the loaded samples (unequal A260 loading or a saturated detector);
+    <b>ladder n pk</b> — resolvable polysome peaks inside the polysome window (informational: a heavy-polysome
+    boundary and per-peak metrics are only meaningful if a regular ladder is resolved);
+    <b>x-shift ⚠</b> — alignment shift ≥ 2 mm (a pure meniscus-detection offset is harmless once aligned, but
+    check that the peak <em>spacing</em> still matches the other runs — a stretched/compressed profile means a
+    different gradient).<br>
+    <b>Heavy (≥4-mer)</b>: optional boundary at the valley between the 3-mer and 4-mer peaks; reports the heavy
+    polysome fraction = AUC[heavy…end] / AUC[mono+poly]. Leave off when the ladder is not resolved.<br>
+    <b>Boundary sensitivity</b> (below the table): the primary ratio recomputed with each edge moved ±1–4 mm.
+    A stable sample ranking means the comparison is robust to the window; a flip means you are measuring the
+    setting — widen the window or report the range.<br>
+    <b>Comparing samples</b>: form ratios within each run (this tool does), compare on the log scale
+    (log2 column) and pair samples across runs/days; never pool raw AUCs across runs — they scale with loading.</div>
   <div class="note">Tips: multi-sample “paste-up” CSVs (e.g. <code>PT_CON_1.csv</code>) put every sample on the
     <em>first</em> sample’s position grid — the single-trace exports are the accurate source, so prefer those.
     The duplicated readings around 0&nbsp;mm are an instrument quirk (position reset at meniscus detection);
@@ -126,9 +158,44 @@
 /* ---------------- parsing ---------------- */
 const COLORS = ["#e41a1c","#377eb8","#4daf4a","#984ea3","#ff7f00","#a65628",
                 "#008080","#b30059","#807dba","#e6ab02","#1b9e77","#66a61e"];
-let traces = [];           // {name, x[], y[], visible, color, file, off}
-let bounds = { m1: null, m2: null, p3: null };
+let traces = [];           // {name, x[], y[], yc[], spikes[], visible, color, file, off}
+let bounds = { m1: null, m2: null, p3: null, h: null };
 let sortState = { key: "name", dir: 1 };
+
+const median = a => { const b = a.slice().sort((p, q) => p - q); return b.length ? b[(b.length - 1) >> 1] : NaN; };
+const despikeOn = () => document.getElementById("despike").checked;
+// y-values used for everything (display, alignment, integration, export):
+// the Hampel-cleaned series when spike removal is on, else the raw series.
+const Y_ = t => (despikeOn() && t.yc) ? t.yc : t.y;
+const px_ = (t, i) => t.x[i] - (t.off || 0);   // shifted position of point i
+
+// Spike (bubble) detection — Hampel filter: 7-sample running median inside
+// the integration window (padded 5 mm, raw positions, so it does not depend
+// on the alignment offset); a sample deviating from its local median by more
+// than 10 robust sigma is a spike. Genuine peaks are ~4 mm wide, so a 0.7 mm
+// median tracks them (80S apex residual ~0.001 OD vs threshold ~0.005 OD),
+// while flow-cell bubbles are 1–3 samples wide and ~0.1 OD. Always computed
+// for the QC column; the cleaned series is only USED when the toggle is on.
+function despikeTrace(t) {
+  const n = t.x.length, y = t.y, yc = y.slice(), spikes = [];
+  t.yc = yc; t.spikes = spikes; t.sigma = NaN;
+  if (bounds.m1 == null) return;
+  const lo = bounds.m1 - 5, hi = bounds.p3 + 5, rm = new Array(n), dif = [];
+  for (let i = 0; i < n; i++) {
+    if (t.x[i] < lo || t.x[i] > hi) continue;
+    rm[i] = median(y.slice(Math.max(0, i - 3), Math.min(n, i + 4)));
+    if (i > 0 && rm[i - 1] !== undefined) dif.push(Math.abs(y[i] - y[i - 1]));
+  }
+  if (dif.length < 20) return;
+  // noise from the median absolute first difference (never degenerate, unlike
+  // the median residual, which is exactly 0 on smooth stretches); the 0.003 OD
+  // floor keeps ultra-clean traces from flagging peak curvature
+  const sigma = 1.4826 * median(dif) / Math.SQRT2;
+  const thr = Math.max(10 * sigma, 0.003);
+  t.sigma = sigma;
+  for (let i = 0; i < n; i++)
+    if (rm[i] !== undefined && Math.abs(y[i] - rm[i]) > thr) { spikes.push(i); yc[i] = rm[i]; }
+}
 
 // per-run x-alignment: offset so every trace's monosome (80S) peak — the OD
 // maximum inside the monosome window, padded by 3 mm to tolerate inter-run
@@ -141,17 +208,42 @@ function computeAlign() {
   if (!on || vis.length < 2 || bounds.m1 == null) { traces.forEach(t => t.off = 0); return; }
   const lo = bounds.m1 - 3, hi = bounds.m2 + 3;
   const apex = t => {
+    const y = Y_(t);
     let bi = -1, bv = -Infinity;
     for (let i = 0; i < t.x.length; i++)
-      if (t.x[i] >= lo && t.x[i] <= hi && t.y[i] > bv) { bv = t.y[i]; bi = i; }
-    if (bi < 0) bi = t.y.indexOf(Math.max(...t.y));   // trace misses the window entirely
+      if (t.x[i] >= lo && t.x[i] <= hi && y[i] > bv) { bv = y[i]; bi = i; }
+    if (bi < 0) bi = y.indexOf(Math.max(...y));   // trace misses the window entirely
     return t.x[bi];
   };
   const as = vis.map(apex).sort((a, b) => a - b);
   const ref = as[(as.length - 1) >> 1];
   traces.forEach(t => t.off = t.visible ? +(apex(t) - ref).toFixed(2) : 0);
 }
-const px_ = (t, i) => t.x[i] - (t.off || 0);   // shifted position of point i
+
+// everything that depends on the current window: spike detection, then alignment
+function prepare() { traces.forEach(despikeTrace); computeAlign(); }
+
+// number of resolvable polysome peaks inside [m2, p3]: local maxima of a
+// 5-sample smoothed series with prominence >= max(0.003 OD, 6 sigma) over the
+// higher flanking minimum within 4 mm. Informational QC ("resolved ladder?").
+function ladderPeaks(t) {
+  const y = Y_(t), idx = [];
+  for (let i = 0; i < t.x.length; i++) { const xv = px_(t, i); if (xv >= bounds.m2 && xv <= bounds.p3) idx.push(i); }
+  if (idx.length < 20) return 0;
+  const s = idx.map((i, k) => { const a = Math.max(0, k - 2), b = Math.min(idx.length - 1, k + 2);
+    let m = 0; for (let j = a; j <= b; j++) m += y[idx[j]]; return m / (b - a + 1); });
+  const prom = Math.max(0.003, 6 * (t.sigma || 0)), n = s.length;
+  let count = 0;
+  for (let k = 3; k < n - 3; k++) {
+    let isMax = true; for (let j = k - 3; j <= k + 3; j++) if (s[j] > s[k]) { isMax = false; break; }
+    if (!isMax) continue;
+    let lmin = Infinity, rmin = Infinity;
+    for (let j = Math.max(0, k - 40); j <= k; j++) lmin = Math.min(lmin, s[j]);
+    for (let j = k; j <= Math.min(n - 1, k + 40); j++) rmin = Math.min(rmin, s[j]);
+    if (s[k] - Math.max(lmin, rmin) >= prom) { count++; k += 3; }
+  }
+  return count;
+}
 
 function splitLine(l) { return l.replace(/\r$/, "").split(/,|\t/); }
 
@@ -246,7 +338,7 @@ function defaultBounds() {
 
 /* ---------------- math ---------------- */
 function interp(t, x) {                      // linear interpolation at SHIFTED position x
-  const X = t.x, Y = t.y, q = x + (t.off || 0);
+  const X = t.x, Y = Y_(t), q = x + (t.off || 0);
   if (q <= X[0]) return Y[0];
   if (q >= X[X.length-1]) return Y[Y.length-1];
   let lo = 0, hi = X.length - 1;
@@ -255,15 +347,34 @@ function interp(t, x) {                      // linear interpolation at SHIFTED 
   return Y[lo] + f * (Y[hi] - Y[lo]);
 }
 
+function parseAnchors() {
+  return (document.getElementById("anchors").value || "").split(/[,;\s]+/)
+    .map(parseFloat).filter(Number.isFinite).sort((a, b) => a - b);
+}
+
 function baselineFn(t, mode) {
-  const { m1, p3 } = bounds;
+  const { m1, p3 } = bounds, Y = Y_(t);
   if (mode === "none") return () => 0;
   if (mode === "min") {
     let mn = Infinity;
     for (let i = 0; i < t.x.length; i++)
-      if (px_(t, i) >= m1 && px_(t, i) <= p3 && t.y[i] < mn) mn = t.y[i];
+      if (px_(t, i) >= m1 && px_(t, i) <= p3 && Y[i] < mn) mn = Y[i];
     if (!isFinite(mn)) mn = 0;
     return () => mn;
+  }
+  if (mode === "anchors") {
+    // piecewise linear through the curve at user anchor positions (flat beyond
+    // the outer anchors); fewer than two anchors falls back to the chord
+    const A = parseAnchors();
+    if (A.length >= 2) {
+      const ys = A.map(a => interp(t, a));
+      return (x) => {
+        if (x <= A[0]) return ys[0];
+        if (x >= A[A.length - 1]) return ys[ys.length - 1];
+        let k = 0; while (A[k + 1] < x) k++;
+        return ys[k] + (x - A[k]) / (A[k + 1] - A[k]) * (ys[k + 1] - ys[k]);
+      };
+    }
   }
   // chord: straight line between the curve values at m1 and p3
   const y1 = interp(t, m1), y2 = interp(t, p3);
@@ -272,11 +383,11 @@ function baselineFn(t, mode) {
 
 function aucRegion(t, a, b, bl) {
   // trapezoid over [a,b] on the baseline-corrected curve, with exact edge interpolation
-  const X = [], Y = [];
+  const X = [], Y = [], y = Y_(t);
   X.push(a); Y.push(interp(t, a) - bl(a));
   for (let i = 0; i < t.x.length; i++) {
     const xv = px_(t, i);
-    if (xv > a && xv < b) { X.push(xv); Y.push(t.y[i] - bl(xv)); }
+    if (xv > a && xv < b) { X.push(xv); Y.push(y[i] - bl(xv)); }
   }
   X.push(b); Y.push(interp(t, b) - bl(b));
   let s = 0;
@@ -284,22 +395,50 @@ function aucRegion(t, a, b, bl) {
   return s;
 }
 
-function computeResults() {
+const heavyOn = () => Number.isFinite(bounds.h) && bounds.h > bounds.m2 && bounds.h < bounds.p3;
+
+function computeResults(opts) {
   const mode = document.getElementById("bmode").value;
-  computeAlign();
-  return traces.filter(t => t.visible).map(t => {
-    const bl = baselineFn(t, mode);
+  if (!(opts && opts.realign === false)) prepare();
+  const rows = traces.map((t, idx) => ({ t, idx })).filter(o => o.t.visible).map(({ t, idx }) => {
+    const bl = baselineFn(t, mode), y = Y_(t);
     const am = aucRegion(t, bounds.m1, bounds.m2, bl);
     const ap = aucRegion(t, bounds.m2, bounds.p3, bl);
+    const ah = heavyOn() ? aucRegion(t, bounds.h, bounds.p3, bl) : NaN;
     // a trace that does not span the regions would be silently flat-extrapolated
     const covered = px_(t, 0) <= bounds.m1 + 0.2 && px_(t, t.x.length - 1) >= bounds.p3 - 0.2;
-    return { name: t.name + (covered ? "" : " ⚠ trace does not cover regions"),
-             color: t.color, aucM: am, aucP: ap,
+    // QC (outcome-independent): spikes inside the window, negative OD, ladder
+    let negOD = false;
+    const spikesIn = (t.spikes || []).filter(i => px_(t, i) >= bounds.m1 && px_(t, i) <= bounds.p3);
+    for (let i = 0; i < t.x.length; i++) if (px_(t, i) >= bounds.m1 && px_(t, i) <= bounds.p3 && y[i] < 0) { negOD = true; break; }
+    const qc = [];
+    if (!covered) qc.push("⚠ trace does not cover regions");
+    if (spikesIn.length) {
+      // merge adjacent samples into events, list the first few positions
+      const ev = []; for (const i of spikesIn) { const xv = px_(t, i);
+        if (!ev.length || xv - ev[ev.length - 1] > 0.6) ev.push(xv); }
+      qc.push(`⚠ spike ×${ev.length} at ${ev.slice(0, 4).map(v => v.toFixed(1)).join(", ")}${ev.length > 4 ? ", …" : ""} mm` +
+              `${despikeOn() ? " (removed)" : ""}`);
+    }
+    if (negOD) qc.push("⚠ negative OD in window");
+    return { key: idx, name: t.name, color: t.color, aucM: am, aucP: ap, aucH: ah,
              mp: ap !== 0 ? am / ap : NaN, pm: am !== 0 ? ap / am : NaN,
-             off: -(t.off || 0),
+             l2: (am > 0 && ap > 0) ? Math.log2(ap / am) : NaN,
+             hf: heavyOn() && (am + ap) > 0 ? ah / (am + ap) : NaN,
+             off: -(t.off || 0), ladder: ladderPeaks(t), qc,
              blv: mode === "min" ? baselineFn(t, "min")(0) : NaN,
-             bl: mode === "none" ? "—" : (mode === "min" ? bl(0).toFixed(4) : "chord") };
+             bl: mode === "none" ? "—" : (mode === "min" ? bl(0).toFixed(4) : mode) };
   });
+  // loading check: total corrected area (mono+poly) vs the median across samples
+  const totals = rows.map(r => r.aucM + r.aucP), med = median(totals);
+  rows.forEach((r, i) => {
+    r.load = med > 0 ? (totals[i] - med) / med : NaN;
+    if (Number.isFinite(r.load) && Math.abs(r.load) > 0.10 && rows.length > 1)
+      r.qc.push(`⚠ loading ${r.load > 0 ? "+" : ""}${(r.load * 100).toFixed(0)}% vs median`);
+    r.qc.push(`ladder ${r.ladder} pk`);
+    r.qcn = r.qc.filter(q => q.startsWith("⚠")).length;
+  });
+  return rows;
 }
 
 /* ---------------- chart ---------------- */
@@ -310,7 +449,7 @@ function render() {
   const wrap = document.getElementById("chartwrap");
   const vis = traces.filter(t => t.visible);
   if (!vis.length) { wrap.innerHTML = ""; renderTable(); return; }
-  computeAlign();
+  prepare();
   const xmin = Math.min(...vis.map(t => px_(t, 0)));
   const xmax = Math.max(...vis.map(t => px_(t, t.x.length - 1)));
   // y-scale: either the full traces, or (default) only the data inside the
@@ -318,12 +457,12 @@ function render() {
   // top does not squash the region of interest.
   const crop = document.getElementById("cropy").checked;
   let ymax = 0, ymin = 0;
-  for (const t of vis) for (let i = 0; i < t.x.length; i++) {
+  for (const t of vis) { const y = Y_(t); for (let i = 0; i < t.x.length; i++) {
     if (crop && (px_(t, i) < bounds.m1 || px_(t, i) > bounds.p3)) continue;
-    if (t.y[i] > ymax) ymax = t.y[i];
-    if (t.y[i] < ymin) ymin = t.y[i];
-  }
-  if (!(ymax > 0)) { for (const t of vis) for (const v of t.y) if (v > ymax) ymax = v; }
+    if (y[i] > ymax) ymax = y[i];
+    if (y[i] < ymin) ymin = y[i];
+  } }
+  if (!(ymax > 0)) { for (const t of vis) for (const v of Y_(t)) if (v > ymax) ymax = v; }
   ymax *= 1.1; ymin = Math.min(0, ymin);
   const sx = x => ML + (x - xmin) / (xmax - xmin) * (W - ML - MR);
   const sy = y => MT + (1 - (y - ymin) / (ymax - ymin)) * (H - MT - MB);
@@ -342,17 +481,35 @@ function render() {
     `<text x="${ML-8}" y="${sy(v)+4}" font-size="11" text-anchor="end" fill="#555">${+v.toFixed(3)}</text>`;
   s += `<text x="${(ML+W-MR)/2}" y="${H-6}" font-size="12" text-anchor="middle" fill="#333">Position (mm)</text>`;
   s += `<text transform="translate(14 ${(MT+H-MB)/2}) rotate(-90)" font-size="12" text-anchor="middle" fill="#333">OD 260 nm</text>`;
-  // traces
+  // heavy-polysome sub-region shading
+  if (heavyOn())
+    s += `<rect x="${sx(bounds.h)}" y="${MT}" width="${Math.max(0, sx(bounds.p3)-sx(bounds.h))}" height="${H-MT-MB}" fill="#984ea3" opacity="0.08"/>`;
+  // traces (+ the baseline actually subtracted, dotted, per trace)
+  const mode = document.getElementById("bmode").value;
   for (const t of vis) {
+    const y = Y_(t);
     let d = "";
     for (let i = 0; i < t.x.length; i++) {
-      const yy = Math.max(ymin, Math.min(ymax, t.y[i]));
+      const yy = Math.max(ymin, Math.min(ymax, y[i]));
       d += (i ? "L" : "M") + sx(px_(t, i)).toFixed(1) + " " + sy(yy).toFixed(1);
     }
     s += `<path d="${d}" fill="none" stroke="${t.color}" stroke-width="1.4" opacity="0.9"/>`;
+    // flagged spikes as small markers
+    for (const i of (t.spikes || [])) {
+      const xv = px_(t, i); if (xv < bounds.m1 || xv > bounds.p3) continue;
+      s += `<text x="${sx(xv)}" y="${MT+26}" font-size="11" text-anchor="middle" fill="${t.color}">▼</text>`;
+    }
+    if (mode !== "none") {
+      const bl = baselineFn(t, mode); let b = "";
+      for (let k = 0; k <= 60; k++) { const xv = bounds.m1 + (bounds.p3 - bounds.m1) * k / 60;
+        const yy = Math.max(ymin, Math.min(ymax, bl(xv)));
+        b += (k ? "L" : "M") + sx(xv).toFixed(1) + " " + sy(yy).toFixed(1); }
+      s += `<path d="${b}" fill="none" stroke="${t.color}" stroke-width="1" stroke-dasharray="2 3" opacity="0.7"/>`;
+    }
   }
   // boundary lines with drag handles
   const BL = [["m1", "#377eb8", "mono ▸"], ["m2", "#555", "◂ mono | poly ▸"], ["p3", "#e6550d", "◂ poly"]];
+  if (heavyOn()) BL.splice(2, 0, ["h", "#984ea3", "heavy ▸"]);
   for (const [k, col, lab] of BL) {
     const px = sx(bounds[k]);
     s += `<line class="bl" data-k="${k}" x1="${px}" y1="${MT}" x2="${px}" y2="${H-MB}" stroke="${col}" stroke-width="2" stroke-dasharray="5 3"/>`;
@@ -377,7 +534,8 @@ function render() {
     let v = Math.max(xmin, Math.min(xmax, toX(e)));
     if (dragKey === "m1") v = Math.min(v, bounds.m2 - 0.5);
     if (dragKey === "m2") v = Math.max(Math.min(v, bounds.p3 - 0.5), bounds.m1 + 0.5);
-    if (dragKey === "p3") v = Math.max(v, bounds.m2 + 0.5);
+    if (dragKey === "p3") v = Math.max(v, (heavyOn() ? bounds.h : bounds.m2) + 0.5);
+    if (dragKey === "h")  v = Math.max(Math.min(v, bounds.p3 - 0.5), bounds.m2 + 0.5);
     bounds[dragKey] = +v.toFixed(1);
     document.getElementById(dragKey).value = bounds[dragKey];
     render();
@@ -416,11 +574,53 @@ function renderTable() {
     th.textContent = th.textContent.replace(/ [▲▼]$/, "") + (k === key ? (dir === 1 ? " ▲" : " ▼") : "");
     th.style.cursor = "pointer";
   });
+  const f3 = v => Number.isFinite(v) ? v.toFixed(3) : "—";
   document.querySelector("#results tbody").innerHTML = rows.map(r =>
     `<tr><td><span class="swatch" style="background:${r.color};vertical-align:-2px"></span> ${esc(r.name)}</td>` +
-    `<td>${r.aucM.toFixed(3)}</td><td>${r.aucP.toFixed(3)}</td>` +
-    `<td class="ratio">${r.mp.toFixed(3)}</td><td>${r.pm.toFixed(3)}</td>` +
-    `<td>${r.off ? r.off.toFixed(2) : "0"}</td><td>${r.bl}</td></tr>`).join("");
+    `<td>${f3(r.aucM)}</td><td>${f3(r.aucP)}</td>` +
+    `<td class="ratio">${f3(r.mp)}</td><td>${f3(r.pm)}</td><td>${f3(r.l2)}</td><td>${f3(r.hf)}</td>` +
+    `<td>${r.off ? r.off.toFixed(2) : "0"}${Math.abs(r.off) >= 2 ? ' <span title="x-shift ≥ 2 mm — check the gradient/run">⚠</span>' : ""}</td>` +
+    `<td>${r.bl}</td><td style="text-align:left;font-size:12px;color:${r.qcn ? "#a04000" : "#667"}">${esc(r.qc.join("; "))}</td></tr>`).join("");
+  renderSensitivity();
+}
+
+// Boundary sensitivity: recompute the primary ratio for perturbed window
+// edges (alignment offsets and spike cleaning held fixed) and check whether
+// the sample RANKING survives. Stable ranking = the biology; flips = the setting.
+const SENS_VARIANTS = [["base",0,0,0],["m1 −1",-1,0,0],["m1 +1",1,0,0],["m2 −2",0,-2,0],["m2 −1",0,-1,0],
+  ["m2 +1",0,1,0],["m2 +2",0,2,0],["p3 −4",0,0,-4],["p3 −2",0,0,-2],["p3 +2",0,0,2]];
+function sensitivity() {
+  if (bounds.m1 == null || !traces.some(t => t.visible)) return null;
+  const b0 = { ...bounds };
+  prepare();
+  const cols = SENS_VARIANTS.map(([lab, d1, d2, d3]) => {
+    bounds = { ...b0, m1: b0.m1 + d1, m2: b0.m2 + d2, p3: b0.p3 + d3 };
+    const ok = bounds.m1 < bounds.m2 - 0.5 && bounds.m2 < bounds.p3 - 0.5;
+    const rs = ok ? computeResults({ realign: false }) : [];
+    return { lab, ok, vals: Object.fromEntries(rs.map(r => [r.key, r.mp])), names: Object.fromEntries(rs.map(r => [r.key, r.name])) };
+  });
+  bounds = b0;
+  const keys = Object.keys(cols[0].vals).map(Number);
+  const order = c => keys.filter(k => Number.isFinite(c.vals[k])).sort((a, b) => c.vals[b] - c.vals[a]).join(",");
+  const base = order(cols[0]);
+  const flips = cols.slice(1).filter(c => c.ok && order(c) !== base).map(c => c.lab);
+  return { cols, keys, flips };
+}
+function renderSensitivity() {
+  const el = document.getElementById("sens"), S = sensitivity();
+  if (!S || S.keys.length < 2) { el.innerHTML = ""; return; }
+  const f = v => Number.isFinite(v) ? v.toFixed(3) : "—";
+  let h = `<div style="margin-top:12px"><b>Boundary sensitivity</b> — Mono / Poly recomputed with each region edge moved by the amount shown (mm); ` +
+    (S.flips.length ? `<span style="color:#a04000">⚠ sample ranking changes under: ${S.flips.join(", ")} — the result depends on the window; report the range, not one number.</span>`
+                    : `<span style="color:#2a7a2a">✓ sample ranking is identical under all ${S.cols.length - 1} perturbations.</span>`) + `</div>`;
+  h += `<div style="overflow-x:auto"><table style="margin-top:6px;font-size:12px"><thead><tr><th>Sample</th>` +
+       S.cols.map(c => `<th>${c.lab}</th>`).join("") + `<th>min – max</th></tr></thead><tbody>`;
+  for (const k of S.keys) {
+    const vs = S.cols.filter(c => c.ok).map(c => c.vals[k]).filter(Number.isFinite);
+    h += `<tr><td>${esc(S.cols[0].names[k] || "")}</td>` + S.cols.map(c => `<td>${c.ok ? f(c.vals[k]) : "—"}</td>`).join("") +
+         `<td>${f(Math.min(...vs))} – ${f(Math.max(...vs))}</td></tr>`;
+  }
+  el.innerHTML = h + `</tbody></table></div>`;
 }
 
 document.querySelectorAll("#results thead th").forEach(th =>
@@ -435,12 +635,15 @@ function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
 
 document.getElementById("dl").addEventListener("click", () => {
   const rows = computeResults();
-  const head = "sample,auc_monosome,auc_polysomes,mono_over_poly,poly_over_mono,x_shift_mm," +
-               "mono_from_mm,mono_to_mm,poly_to_mm,baseline_mode\n";
+  const head = "sample,auc_monosome,auc_polysomes,mono_over_poly,poly_over_mono,log2_poly_over_mono," +
+               "auc_heavy,heavy_fraction,x_shift_mm,qc," +
+               "mono_from_mm,mono_to_mm,poly_to_mm,heavy_from_mm,baseline_mode,baseline_anchors_mm,despike\n";
   const mode = document.getElementById("bmode").value;
-  const body = rows.map(r => [JSON.stringify(r.name), r.aucM.toFixed(5), r.aucP.toFixed(5),
-    r.mp.toFixed(5), r.pm.toFixed(5), (r.off || 0).toFixed(2),
-    bounds.m1, bounds.m2, bounds.p3, mode].join(",")).join("\n");
+  const n5 = v => Number.isFinite(v) ? v.toFixed(5) : "";
+  const body = rows.map(r => [JSON.stringify(r.name), n5(r.aucM), n5(r.aucP),
+    n5(r.mp), n5(r.pm), n5(r.l2), n5(r.aucH), n5(r.hf), (r.off || 0).toFixed(2), JSON.stringify(r.qc.join("; ")),
+    bounds.m1, bounds.m2, bounds.p3, heavyOn() ? bounds.h : "", mode,
+    JSON.stringify(mode === "anchors" ? parseAnchors().join(" ") : ""), despikeOn() ? "on" : "off"].join(",")).join("\n");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([head + body], { type: "text/csv" }));
   a.download = "polysome_auc_results.csv";
@@ -451,13 +654,25 @@ document.getElementById("dl").addEventListener("click", () => {
   const v = parseFloat(e.target.value);
   if (isFinite(v)) { bounds[k] = v; render(); }
 }));
-document.getElementById("bmode").addEventListener("change", render);
+document.getElementById("h").addEventListener("change", e => {
+  const v = parseFloat(e.target.value);
+  bounds.h = isFinite(v) ? v : null; render();
+});
+document.getElementById("bmode").addEventListener("change", () => {
+  const anch = document.getElementById("bmode").value === "anchors";
+  document.getElementById("anchorsgrp").hidden = !anch;
+  if (anch && !document.getElementById("anchors").value && bounds.m1 != null)
+    document.getElementById("anchors").value = `${bounds.m1}, ${bounds.p3}`;
+  render();
+});
+document.getElementById("anchors").addEventListener("change", render);
 document.getElementById("cropy").addEventListener("change", render);
 document.getElementById("alignx").addEventListener("change", render);
+document.getElementById("despike").addEventListener("change", render);
 document.getElementById("clearall").addEventListener("click", () => {
   traces.length = 0;
-  bounds = { m1: null, m2: null, p3: null };
-  ["m1","m2","p3"].forEach(k => document.getElementById(k).value = "");
+  bounds = { m1: null, m2: null, p3: null, h: null };
+  ["m1","m2","p3","h","anchors"].forEach(k => document.getElementById(k).value = "");
   document.getElementById("finput").value = "";
   document.getElementById("filewarn").innerHTML = "";
   renderTraceList(); render();
@@ -564,10 +779,10 @@ ${sers}
 
 // tallest OD inside the mono/poly window (shifted positions), for y-axis caps
 function regionYMax(t) {
-  let m = -Infinity;
+  let m = -Infinity; const y = Y_(t);
   for (let i = 0; i < t.x.length; i++) {
     const xv = px_(t, i);
-    if (xv >= bounds.m1 && xv <= bounds.p3 && t.y[i] > m) m = t.y[i];
+    if (xv >= bounds.m1 && xv <= bounds.p3 && y[i] > m) m = y[i];
   }
   return m;
 }
@@ -585,29 +800,35 @@ function drawingXml(c1, r1, c2, r2) {
 }
 
 function buildXlsx() {
-  computeAlign();
+  prepare();
   const vis = traces.filter(t => t.visible);
   const rows = computeResults();
+  const S = sensitivity();
   const mode = document.getElementById("bmode").value;
-  const used = new Set(["summary"]);
+  const used = new Set(["summary", "sensitivity"]);
   const sheets = vis.map((t, i) => ({ t, name: sheetSafe(t.name, used) }));
 
   // Summary sheet
-  const sHead = ["Sample","AUC monosome","AUC polysomes","Mono / Poly","Poly / Mono","x-shift (mm)","Baseline"];
+  const sHead = ["Sample","AUC monosome","AUC polysomes","Mono / Poly","Poly / Mono","log2 (Poly / Mono)",
+                 "AUC heavy","Heavy fraction","x-shift (mm)","x-shift flag","Baseline","QC"];
   let sm = `<row r="1">` + sHead.map((h, c) => cellS(1, c + 1, h)).join("") + `</row>`;
   // numeric cell only for finite values — <v>NaN</v> is invalid OOXML
   const cellV = (rn, c, v, d) => Number.isFinite(v) ? cellN(rn, c, v.toFixed(d)) : cellS(rn, c, "n/a");
   rows.forEach((r, i) => {
     const rn = i + 2;
     sm += `<row r="${rn}">` + cellS(rn, 1, r.name) + cellV(rn, 2, r.aucM, 5) +
-      cellV(rn, 3, r.aucP, 5) + cellV(rn, 4, r.mp, 5) + cellV(rn, 5, r.pm, 5) +
-      cellV(rn, 6, r.off || 0, 2) + cellS(rn, 7, r.bl) + `</row>`;
+      cellV(rn, 3, r.aucP, 5) + cellV(rn, 4, r.mp, 5) + cellV(rn, 5, r.pm, 5) + cellV(rn, 6, r.l2, 5) +
+      cellV(rn, 7, r.aucH, 5) + cellV(rn, 8, r.hf, 5) +
+      cellV(rn, 9, r.off || 0, 2) + cellS(rn, 10, Math.abs(r.off) >= 2 ? "WARNING: shift >= 2 mm" : "") +
+      cellS(rn, 11, r.bl) + cellS(rn, 12, r.qc.join("; ")) + `</row>`;
   });
   const setRow0 = rows.length + 3;
   const fitY = document.getElementById("cropy").checked;
   const settings = [["Monosome from (mm)", bounds.m1], ["Monosome to / poly from (mm)", bounds.m2],
-    ["Polysomes to (mm)", bounds.p3], ["Baseline mode", mode],
+    ["Polysomes to (mm)", bounds.p3], ["Heavy polysomes from (mm)", heavyOn() ? bounds.h : "off"],
+    ["Baseline mode", mode], ["Baseline anchors (mm)", mode === "anchors" ? parseAnchors().join(", ") : "—"],
     ["Peak alignment", document.getElementById("alignx").checked ? "on" : "off"],
+    ["Spike removal (Hampel)", despikeOn() ? "on" : "off"],
     ["Chart y-axis fit to regions", fitY ? "on" : "off"],
     ["Exported", new Date().toISOString()], ["Tool", "polysome_auc_viewer.html"]];
   settings.forEach((kv, i) => {
@@ -636,7 +857,7 @@ function buildXlsx() {
   // Summary tab: combined chart of every exported trace (aligned positions,
   // same colors as the viewer), anchored below the settings block
   if (sheets.length) {
-    const top = rows.length + 11;                       // 0-based row below the settings
+    const top = rows.length + 14;                       // 0-based row below the settings
     files.push({ name: "xl/worksheets/sheet1.xml",
                  text: sheetXml({ rows: sm, drawing: `<drawing r:id="rId1"/>` }) });
     files.push({ name: "xl/worksheets/_rels/sheet1.xml.rels", text: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -665,8 +886,9 @@ function buildXlsx() {
   sheets.forEach((sh, i) => {
     const sn = i + 2, t = sh.t, n = t.x.length;
     let rws = `<row r="1">` + cellS(1, 1, "Position (mm)") + cellS(1, 2, t.name) + `</row>`;
+    const yv = Y_(t);
     for (let j = 0; j < n; j++)
-      rws += `<row r="${j + 2}">` + cellN(j + 2, 1, px_(t, j).toFixed(4)) + cellN(j + 2, 2, t.y[j]) + `</row>`;
+      rws += `<row r="${j + 2}">` + cellN(j + 2, 1, px_(t, j).toFixed(4)) + cellN(j + 2, 2, yv[j]) + `</row>`;
     files.push({ name: `xl/worksheets/sheet${sn}.xml`,
                  text: sheetXml({ rows: rws, drawing: `<drawing r:id="rId1"/>` }) });
     files.push({ name: `xl/worksheets/_rels/sheet${sn}.xml.rels`, text: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -686,7 +908,27 @@ function buildXlsx() {
     wbSheets += `<sheet name="${xesc(sh.name)}" sheetId="${sn}" r:id="rId${sn}"/>`;
     wbRels += `<Relationship Id="rId${sn}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${sn}.xml"/>`;
   });
-  const rStyles = sheets.length + 2;
+  // Sensitivity sheet: primary ratio under perturbed window edges + ranking verdict
+  let nextId = sheets.length + 2;
+  if (S && S.keys.length) {
+    const sn = nextId++;
+    let sr = `<row r="1">` + cellS(1, 1, "Sample") +
+      S.cols.map((c, k) => cellS(1, k + 2, "Mono/Poly @ " + c.lab)).join("") + `</row>`;
+    S.keys.forEach((key, i) => {
+      const rn = i + 2;
+      sr += `<row r="${rn}">` + cellS(rn, 1, S.cols[0].names[key] || "") +
+        S.cols.map((c, k) => cellV(rn, k + 2, c.ok ? c.vals[key] : NaN, 5)).join("") + `</row>`;
+    });
+    const vr = S.keys.length + 3;
+    sr += `<row r="${vr}">` + cellS(vr, 1, S.flips.length
+      ? "WARNING: sample ranking changes under: " + S.flips.join(", ") + " - result depends on the window; report the range"
+      : "Sample ranking identical under all perturbations") + `</row>`;
+    files.push({ name: `xl/worksheets/sheet${sn}.xml`, text: sheetXml({ rows: sr }) });
+    ct.push(`<Override PartName="/xl/worksheets/sheet${sn}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`);
+    wbSheets += `<sheet name="Sensitivity" sheetId="${sn}" r:id="rId${sn}"/>`;
+    wbRels += `<Relationship Id="rId${sn}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${sn}.xml"/>`;
+  }
+  const rStyles = nextId;
   wbRels += `<Relationship Id="rId${rStyles}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>`;
   files.push({ name: "xl/workbook.xml", text: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ${XR}><sheets>${wbSheets}</sheets></workbook>` });
@@ -706,9 +948,10 @@ document.getElementById("dlx").addEventListener("click", () => {
 });
 
 // tiny hook so the tool can be driven for automated testing (harmless in normal use)
-window.__pav = { addFileText, setBounds: (a,b,c) => { bounds.m1=a; bounds.m2=b; bounds.p3=c;
-  ["m1","m2","p3"].forEach((k,i)=>document.getElementById(k).value=[a,b,c][i]); render(); },
-  results: computeResults, traces: () => traces, buildXlsx };
+window.__pav = { addFileText, setBounds: (a,b,c,h) => { bounds.m1=a; bounds.m2=b; bounds.p3=c; bounds.h = h ?? null;
+  ["m1","m2","p3"].forEach((k,i)=>document.getElementById(k).value=[a,b,c][i]);
+  document.getElementById("h").value = h ?? ""; render(); },
+  results: computeResults, traces: () => traces, buildXlsx, sensitivity };
 </script>
 </body>
 </html>
