@@ -18,3 +18,7 @@ This repository is the source of truth. The whole tool is `index.html` (HTML + C
 JS, no build step); GitHub Pages serves `main` directly, so every push to `main`
 updates the public URL within about a minute. To work on it locally, open
 `index.html` in a browser (or serve the folder with any static server).
+
+## License
+
+MIT — see [LICENSE](LICENSE). Copyright (c) 2026 Bernhard Buss, ETH Zurich.
