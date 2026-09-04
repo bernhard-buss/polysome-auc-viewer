@@ -14,3 +14,5 @@
   workbooks with openpyxl after changing it.
 - Never add data files here. Real instrument traces used for testing live outside
   this repository (a private sibling project); serve them locally instead.
+- `VERSION` (top of the script) must be bumped, with a CHANGELOG.md entry, for every change
+  that alters computed numbers; leave it alone for documentation/layout/export-format work.

@@ -67,7 +67,7 @@
 </head>
 <body>
 <h1>Polysome AUC Viewer</h1>
-<div class="sub">Load BioComp Triax FlowCell exports (<code>.csv</code>) or plain two-column position/OD files
+<div class="sub"><b id="ver"></b> · Load BioComp Triax FlowCell exports (<code>.csv</code>) or plain two-column position/OD files
 (<code>.txt</code>/<code>.csv</code>). Everything runs locally in your browser — no data leaves this page.</div>
 
 <div class="panel">
@@ -285,6 +285,10 @@
 /* ---------------- parsing ---------------- */
 const COLORS = ["#e41a1c","#377eb8","#4daf4a","#984ea3","#ff7f00","#a65628",
                 "#008080","#b30059","#807dba","#e6ab02","#1b9e77","#66a61e"];
+// Bump for every change that affects computed numbers (landmarks, baselines, boundaries,
+// integration, QC thresholds); documentation/layout-only changes do not bump it. See CHANGELOG.md.
+const VERSION = "1.0";
+document.getElementById("ver").textContent = "v" + VERSION;
 let traces = [];           // {name, x[], y[], yc[], spikes[], visible, color, file, off}
 let bounds = { t0: null, m1: null, m2: null, p3: null, h: null };
 const REF80 = 32.0;        // aligned position of the 80S peak (mm) — fixed so windows are portable
@@ -1038,7 +1042,7 @@ function renderDesign(rows) {
 }
 function settingsObj() {
   const bl = traces.find(t => t.blank);
-  return { t0: bounds.t0, m1: bounds.m1, m2: bounds.m2, p3: bounds.p3, h: bounds.h, ref80: REF80, baseline: document.getElementById("bmode").value,
+  return { version: VERSION, t0: bounds.t0, m1: bounds.m1, m2: bounds.m2, p3: bounds.p3, h: bounds.h, ref80: REF80, baseline: document.getElementById("bmode").value,
     anchors: document.getElementById("anchors").value, align: document.getElementById("alignx").checked, despike: despikeOn(),
     blank: bl ? bl.name : "", contrasts: document.getElementById("contrasts_in").value,
     excluded: traces.filter(t => t.meta && t.meta.excl).map(t => t.name + ": " + t.meta.excl),
@@ -1058,15 +1062,15 @@ function tidyCsv() {
     ["mono_over_poly", r => r.mp], ["log2_poly_over_mono", r => r.l2], ["polysome_fraction", r => r.pf], ["a40", r => r.a40], ["a60", r => r.a60],
     ["free_subunit_fraction", r => r.fs], ["molar_40s_60s", r => r.molar], ["heavy_fraction", r => r.hf], ["x_shift_mm", r => r.off],
     ["end_slope_od_per_mm", r => r.slope], ["mono_over_poly_sens_min", r => rng[r.key] ? rng[r.key][0] : NaN], ["mono_over_poly_sens_max", r => rng[r.key] ? rng[r.key][1] : NaN]];
-  const head = "sample,block,group,loaded_a260,scan_time,excluded,exclude_reason,ladder,qc,metric,value,settings_hash\n";
+  const head = "sample,block,group,loaded_a260,scan_time,excluded,exclude_reason,ladder,qc,metric,value,settings_hash,tool_version\n";
   const q = s => JSON.stringify(String(s ?? ""));
   const lines = [];
   const all = traces.map((t, idx) => ({ t, idx })).filter(o => !o.t.blank);
   for (const { t, idx } of all) {
     const r = rows.find(x => x.key === idx), m = t.meta || {};
-    if (!r) { lines.push([q(t.name), q(m.block), q(m.group), Number.isFinite(m.a260) ? m.a260 : "", q(t.scan), "yes", q(m.excl), "", "", "", "", hash].join(",")); continue; }
+    if (!r) { lines.push([q(t.name), q(m.block), q(m.group), Number.isFinite(m.a260) ? m.a260 : "", q(t.scan), "yes", q(m.excl), "", "", "", "", hash, VERSION].join(",")); continue; }
     for (const [name, fn] of M) { const v = fn(r);
-      lines.push([q(t.name), q(m.block), q(m.group), Number.isFinite(m.a260) ? m.a260 : "", q(t.scan), "no", "", q(r.ladder), q(r.qc.join("; ")), name, Number.isFinite(v) ? v.toFixed(6) : "", hash].join(",")); }
+      lines.push([q(t.name), q(m.block), q(m.group), Number.isFinite(m.a260) ? m.a260 : "", q(t.scan), "no", "", q(r.ladder), q(r.qc.join("; ")), name, Number.isFinite(v) ? v.toFixed(6) : "", hash, VERSION].join(",")); }
   }
   return head + lines.join("\n");
 }
@@ -1150,7 +1154,7 @@ document.getElementById("dl").addEventListener("click", () => {
   const head = "sample,total_auc,ribosomal_auc,first_peak_od,auc_monosome,auc_polysomes,mono_over_poly,poly_over_mono,log2_poly_over_mono," +
                "polysome_fraction,a40,a60,free_subunit_fraction,molar_40s_60s,auc_heavy,heavy_fraction," +
                "x_shift_mm,x40_mm,x60_mm,x80_mm,polysome_peaks,ladder,end_slope_od_per_mm,qc," +
-               "total_from_mm,mono_from_mm,mono_to_mm,poly_to_mm,heavy_from_mm,ref_80s_mm,baseline_mode,baseline_anchors_mm,despike,blank,block,group,loaded_a260,scan_time,settings_hash\n";
+               "total_from_mm,mono_from_mm,mono_to_mm,poly_to_mm,heavy_from_mm,ref_80s_mm,baseline_mode,baseline_anchors_mm,despike,blank,block,group,loaded_a260,scan_time,settings_hash,tool_version\n";
   const mode = document.getElementById("bmode").value, blank = traces.find(t => t.blank);
   const n5 = v => Number.isFinite(v) ? v.toFixed(5) : "";
   const body = rows.map(r => [JSON.stringify(r.name), n5(r.tot), n5(r.rib), n5(r.p0y), n5(r.aucM), n5(r.aucP),
@@ -1159,7 +1163,7 @@ document.getElementById("dl").addEventListener("click", () => {
     Number.isFinite(bounds.t0) ? bounds.t0 : "", bounds.m1, bounds.m2, bounds.p3, heavyOn() ? bounds.h : "", REF80, mode,
     JSON.stringify(mode === "anchors" ? parseAnchors().join(" ") : ""), despikeOn() ? "on" : "off",
     JSON.stringify(blank ? blank.name : ""), JSON.stringify(r.meta.block || ""), JSON.stringify(r.meta.group || ""),
-    Number.isFinite(r.meta.a260) ? r.meta.a260 : "", JSON.stringify(r.scan || ""), settingsHash()].join(",")).join("\n");
+    Number.isFinite(r.meta.a260) ? r.meta.a260 : "", JSON.stringify(r.scan || ""), settingsHash(), VERSION].join(",")).join("\n");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([head + body], { type: "text/csv" }));
   a.download = "polysome_auc_results.csv";
@@ -1374,7 +1378,7 @@ function buildXlsx() {
     ["Chart y-axis fit to regions", fitY ? "on" : "off"],
     ["Excluded samples (reason)", traces.filter(t => t.meta && t.meta.excl).map(t => t.name + ": " + t.meta.excl).join("; ") || "none"],
     ["Settings hash" + (locked ? " (locked)" : ""), settingsHash()],
-    ["Exported", new Date().toISOString()], ["Tool", "polysome_auc_viewer.html"]];
+    ["Exported", new Date().toISOString()], ["Tool", "Polysome AUC Viewer v" + VERSION]];
   settings.forEach((kv, i) => {
     const rn = setRow0 + i;
     sm += `<row r="${rn}">` + cellS(rn, 1, kv[0]) +

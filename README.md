@@ -16,6 +16,11 @@ end, non-linear first peak, scan-order confounding); boundary × baseline sensit
 per-block contrasts with a paired t; pairwise scale test; settings lock with hash; CSV,
 tidy CSV and Excel export (native charts).
 
+## Versioning
+
+The version under the title is bumped only for changes that affect computed numbers and is
+written into every export (`tool_version`) and into the settings hash; see [CHANGELOG.md](CHANGELOG.md).
+
 ## Development
 
 This repository is the source of truth. The whole tool is `index.html` (HTML + CSS +
