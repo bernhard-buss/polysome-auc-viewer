@@ -16,3 +16,4 @@
   this repository (a private sibling project); serve them locally instead.
 - `VERSION` (top of the script) must be bumped, with a CHANGELOG.md entry, for every change
   that alters computed numbers; leave it alone for documentation/layout/export-format work.
+- CHANGELOG.md is ordered newest version first (the Changelog help tab renders it as is).

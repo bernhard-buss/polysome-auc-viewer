@@ -137,7 +137,11 @@
       <div class="frow" id="anchorsgrp" hidden><span class="lbl">Anchors (mm)</span><input type="text" id="anchors" size="22" placeholder="e.g. 25, 40, 74"></div>
       <div class="frow"><span class="lbl" title="Empty-gradient run, subtracted from every sample before anything else">Blank gradient</span>
         <select id="blank"><option value="">none</option></select><a class="hl" href="#help" data-help="baseline" title="Help: blank subtraction">ⓘ</a></div>
-      <label class="chk"><input type="checkbox" id="alignx" checked> align samples at the 80S peak (reference 32.0 mm)<a class="hl" href="#help" data-help="pipeline" title="Help: alignment">ⓘ</a></label>
+      <label class="chk"><input type="checkbox" id="alignx" checked> align samples
+        <select id="alignmode" title="shift only: every sample's 80S moved to the reference; shift + scale: least-squares x = a + b·x_ref on the 40S/60S/80S/disome/trisome landmarks (advanced; linear only)">
+          <option value="shift" selected>shift only (80S → reference)</option>
+          <option value="affine">shift + scale (landmark least squares, advanced)</option>
+        </select><a class="hl" href="#help" data-help="pipeline" title="Help: alignment">ⓘ</a></label>
       <label class="chk"><input type="checkbox" id="despike"> repair spikes inside the regions (bubbles)<a class="hl" href="#help" data-help="qc" title="Help: QC flags">ⓘ</a></label>
     </fieldset>
     <fieldset class="fs"><legend>Display</legend>
@@ -243,6 +247,8 @@
     <p><b>Total AUC</b> starts at the onset of the very first data peak, so it includes the free-RNA peak and excludes only the start artefacts before it.</p>
     <h3>Gradient profile (advanced)</h3>
     <p>The landmark search assumes a geometry: where the void ends, where the 80S can be, how far apart the subunit peaks sit, where to look for g4, and the aligned 80S reference. The defaults are for 10–50 % sucrose in an SW41 tube. For a different gradient, adjust them in the <b>Gradient profile</b> group (the preset switches to “custom”); the profile is part of the settings hash and of every export. A QC flag warns when a peak outside the 80S window is more prominent than the chosen 80S — the usual symptom of a wrong window.</p>
+    <h3>Shift + scale (advanced)</h3>
+    <p>Runs from one spin share ω²t, but gradient shape (gradient-maker variation, fill volume, diffusion while waiting) can compress or stretch the position scale by a few percent. The optional <b>shift + scale</b> mode fits x = a + b·x<sub>ref</sub> per sample by least squares on landmarks of known identity (40S, 60S, 80S, disome, trisome) against their shift-only consensus. Rules that keep this honest: linear only (never elastic warping); small factors only — |b − 1| beyond 5 % is flagged as a physically different gradient to exclude rather than correct; b is reported per sample (under the x-shift, and in the exports); and areas are integrated in each sample's <em>native</em> mm, so no area is multiplied by b. Because a uniform stretch scales both regions equally, Poly/Mono is invariant to it — the mode only makes shared boundaries land more consistently. Keep shift-only unless the landmark line or the sensitivity range shows a scale problem.</p>
     <h3>Pure-offset test</h3>
     <p>If every sample's g1–g3 valleys sit within 1.5 mm of the consensus after alignment, the x-shifts are a pure meniscus-detection offset and the gradients are physically equivalent. A larger deviation means that gradient differs in scale; a single shift cannot align it, and the sample is flagged.</p>
     <h3>Polysome ladder (2-, 3-, 4-, 5-mer)</h3>
@@ -270,7 +276,7 @@
       <tr><td>AUC monosome / polysomes</td><td>areas of the two regions after baseline subtraction</td></tr>
       <tr><td>Mono / Poly, Poly / Mono</td><td>the ratios; unitless, loading cancels once the baseline is right. Under Mono / Poly: <b>± noise</b> — the 1σ from random noise plus a one-sigma baseline offset (statistical only) — and the <b>min–max</b> over the sensitivity grid under the current baseline (the setting-dependence). Both are in the exports.</td></tr>
       <tr><td>log2 (Poly / Mono)</td><td>the scale on which to compare and average ratios</td></tr>
-      <tr><td>x-shift</td><td>alignment shift applied (mm); ⚠ at ≥ 2 mm only as a reminder to check the pure-offset test</td></tr></table>
+      <tr><td>x-shift</td><td>movement applied to the sample's 80S (mm); ⚠ at ≥ 2 mm only as a reminder to check the pure-offset test. In shift + scale mode the fitted factor b is shown underneath (× 0.97 …)</td></tr></table>
     <h3>Extended table</h3>
     <table><tr><th>column</th><th>definition</th></tr>
       <tr><td>First peak (OD)</td><td>apex of the free-RNA peak</td></tr>
@@ -346,7 +352,7 @@ const COLORS = ["#e41a1c","#377eb8","#4daf4a","#984ea3","#ff7f00","#a65628",
                 "#008080","#b30059","#807dba","#e6ab02","#1b9e77","#66a61e"];
 // Bump for every change that affects computed numbers (landmarks, baselines, boundaries,
 // integration, QC thresholds); documentation/layout-only changes do not bump it. See CHANGELOG.md.
-const VERSION = "1.1";
+const VERSION = "1.2";
 document.getElementById("ver").textContent = "v" + VERSION;
 let traces = [];           // {name, x[], y[], yc[], spikes[], visible, color, file, off}
 let bounds = { t0: null, m1: null, m2: null, p3: null, h: null };
@@ -373,7 +379,10 @@ const despikeOn = () => document.getElementById("despike").checked;
 // y-values used for everything (display, alignment, integration, export):
 // the Hampel-cleaned series when spike removal is on, else the raw series.
 const Y_ = t => (despikeOn() && t.yc) ? t.yc : (t.yb || t.y);   // yb = blank-subtracted raw
-const px_ = (t, i) => t.x[i] - (t.off || 0);   // shifted position of point i
+const ax_ = (t, xv) => (xv - (t.off || 0)) / (t.scale || 1);   // native -> aligned position
+const nx_ = (t, xa) => xa * (t.scale || 1) + (t.off || 0);      // aligned -> native position
+const px_ = (t, i) => ax_(t, t.x[i]);                            // aligned position of point i
+const SCALE_TOL = 0.05;                                          // |b-1| beyond this = different gradient
 // sample spacing (mm) of a trace — windows below are specified in mm and converted
 const dxOf = t => { if (t.dx) return t.dx; const d = []; for (let i = 1; i < Math.min(t.x.length, 400); i++) d.push(t.x[i] - t.x[i - 1]);
   t.dx = Math.max(0.01, median(d) || 0.1); return t.dx; };
@@ -540,7 +549,7 @@ function interpRaw(t, x) {                    // linear interpolation of the RAW
   return Y[lo] + f * (Y[hi] - Y[lo]);
 }
 function interpS(t, x) {                      // smoothed series at SHIFTED position x
-  const X = t.x, S = t.sm, q = x + (t.off || 0);
+  const X = t.x, S = t.sm, q = nx_(t, x);
   if (q <= X[0]) return S[0];
   if (q >= X[X.length - 1]) return S[S.length - 1];
   let lo = 0, hi = X.length - 1;
@@ -556,11 +565,33 @@ function slopeFit(xs, ys) {
 }
 
 function computeAlign() {
-  const on = document.getElementById("alignx").checked;
+  const on = document.getElementById("alignx").checked, mode = document.getElementById("alignmode").value;
   for (const t of traces) {
+    t.scale = 1;
     if (!on || t.blank) { t.off = 0; continue; }
     const x80 = (t.lm && t.lm.x80 != null) ? t.lm.x80 : apexFallback(t);
     t.off = +(x80 - REF80).toFixed(2);
+  }
+  if (!on || mode !== "affine") return;
+  // shift + scale: least-squares x = a + b·x_ref per sample on its landmarks of known
+  // identity (40S, 60S, 80S, disome, trisome) against their shift-only consensus.
+  // Linear only, never elastic; |b-1| > SCALE_TOL is flagged as a different gradient.
+  const vis = traces.filter(t => t.visible && !t.blank && !(t.meta && t.meta.excl) && t.lm && t.lm.x80 != null);
+  if (vis.length < 2) return;
+  const keys = ["x40", "x60", "x80", "n2", "n3"];
+  const getL = (t, k) => k[0] === "n" ? (t.lm.lad && t.lm.lad[k] ? t.lm.lad[k].x : null) : t.lm[k];
+  const ref = {};
+  for (const k of keys) { const a = vis.map(t => { const v = getL(t, k); return v != null ? v - t.off : NaN; }).filter(Number.isFinite);
+    if (a.length >= 2) ref[k] = median(a); }
+  for (const t of vis) {
+    const X = [], R = [];
+    for (const k of keys) { const v = getL(t, k); if (v != null && ref[k] != null) { X.push(v); R.push(ref[k]); } }
+    if (X.length < 2) continue;
+    const n = X.length, mr = R.reduce((s, v) => s + v, 0) / n, mx = X.reduce((s, v) => s + v, 0) / n;
+    let sxy = 0, sxx = 0; for (let i = 0; i < n; i++) { sxy += (R[i] - mr) * (X[i] - mx); sxx += (R[i] - mr) ** 2; }
+    if (sxx <= 0) continue;
+    const b = sxy / sxx, a = mx - b * mr;
+    t.scale = +b.toFixed(4); t.off = +a.toFixed(3); t.nFit = n;
   }
 }
 function apexFallback(t) {                    // tallest smoothed point in 22-42 mm (raw)
@@ -589,23 +620,23 @@ function consensusLandmarks() {
   const vis = traces.filter(t => t.visible && !t.blank && !(t.meta && t.meta.excl) && t.lm && t.lm.x80 != null);
   traces.forEach(t => t.lmDev = NaN);
   if (!vis.length) return;
-  const A = k => vis.map(t => t.lm[k] != null ? +(t.lm[k] - (t.off || 0)).toFixed(2) : NaN).filter(Number.isFinite);
+  const A = k => vis.map(t => t.lm[k] != null ? +(ax_(t, t.lm[k])).toFixed(2) : NaN).filter(Number.isFinite);
   const g = {};
   for (const k of ["g1", "g2", "g3", "g4"]) { const a = A(k); g[k] = a.length ? +median(a).toFixed(1) : null;
     g[k + "_spread"] = a.length ? +(Math.max(...a) - Math.min(...a)).toFixed(1) : NaN; }
-  const X = k => vis.map(t => t.lm[k] != null ? t.lm[k] - (t.off || 0) : NaN).filter(Number.isFinite);
+  const X = k => vis.map(t => t.lm[k] != null ? ax_(t, t.lm[k]) : NaN).filter(Number.isFinite);
   g.x40 = X("x40").length ? +median(X("x40")).toFixed(1) : null;
   g.x60 = X("x60").length ? +median(X("x60")).toFixed(1) : null;
   g.x80 = +median(X("x80")).toFixed(1);
-  for (const k of ["n2", "n3", "n4", "n5"]) { const a = vis.map(t => t.lm.lad && t.lm.lad[k] ? +(t.lm.lad[k].x - (t.off || 0)).toFixed(2) : NaN).filter(Number.isFinite);
+  for (const k of ["n2", "n3", "n4", "n5"]) { const a = vis.map(t => t.lm.lad && t.lm.lad[k] ? +(ax_(t, t.lm.lad[k].x)).toFixed(2) : NaN).filter(Number.isFinite);
     g[k] = a.length >= Math.max(1, Math.ceil(vis.length / 2)) ? +median(a).toFixed(1) : null; g[k + "_n"] = a.length; }
-  for (const k of ["v23", "v34", "v45"]) { const a = vis.map(t => t.lm.lad && t.lm.lad[k] != null ? +(t.lm.lad[k] - (t.off || 0)).toFixed(2) : NaN).filter(Number.isFinite);
+  for (const k of ["v23", "v34", "v45"]) { const a = vis.map(t => t.lm.lad && t.lm.lad[k] != null ? +(ax_(t, t.lm.lad[k])).toFixed(2) : NaN).filter(Number.isFinite);
     g[k] = a.length >= Math.max(1, Math.ceil(vis.length / 2)) ? +median(a).toFixed(1) : null; g[k + "_spread"] = a.length ? +(Math.max(...a) - Math.min(...a)).toFixed(1) : NaN; }
   g.end = +(Math.min(...vis.map(t => px_(t, t.x.length - 1))) - 0.5).toFixed(1);
-  const t0s = vis.map(t => t.lm.t0 != null ? +(t.lm.t0 - (t.off || 0)).toFixed(2) : NaN).filter(Number.isFinite);
+  const t0s = vis.map(t => t.lm.t0 != null ? +(ax_(t, t.lm.t0)).toFixed(2) : NaN).filter(Number.isFinite);
   g.t0 = t0s.length ? +median(t0s).toFixed(1) : null;
   for (const t of vis) { let d = 0;
-    for (const k of ["g1", "g2", "g3"]) if (t.lm[k] != null && g[k] != null) d = Math.max(d, Math.abs(t.lm[k] - (t.off || 0) - g[k]));
+    for (const k of ["g1", "g2", "g3"]) if (t.lm[k] != null && g[k] != null) d = Math.max(d, Math.abs(ax_(t, t.lm[k]) - g[k]));
     t.lmDev = +d.toFixed(1); }
   g.pureOffset = vis.every(t => !(t.lmDev > LM_TOL));
   landmarks = g;
@@ -725,7 +756,7 @@ function defaultBounds() {                    // fallback when no landmarks are 
 
 /* ---------------- math ---------------- */
 function interp(t, x) {                      // linear interpolation at SHIFTED position x
-  const X = t.x, Y = Y_(t), q = x + (t.off || 0);
+  const X = t.x, Y = Y_(t), q = nx_(t, x);
   if (q <= X[0]) return Y[0];
   if (q >= X[X.length-1]) return Y[Y.length-1];
   let lo = 0, hi = X.length - 1;
@@ -780,7 +811,7 @@ function aucRegion(t, a, b, bl) {
   X.push(b); Y.push(interp(t, b) - bl(b));
   let s = 0;
   for (let i = 1; i < X.length; i++) s += (X[i] - X[i-1]) * (Y[i] + Y[i-1]) / 2;
-  return s;
+  return s * (t.scale || 1);                 // integrate in the sample's native mm
 }
 
 const heavyOn = () => Number.isFinite(bounds.h) && bounds.h > bounds.m2 && bounds.h < bounds.p3;
@@ -839,6 +870,7 @@ function computeResults(opts) {
     if (negOD) qc.push("⚠ negative OD in window");
     if (am < 0 || ap < 0) qc.push("⚠ negative area — baseline above the data");
     if (Number.isFinite(t.lmDev) && t.lmDev > LM_TOL) qc.push(`⚠ valleys off by ${t.lmDev.toFixed(1)} mm after alignment — gradient scale differs`);
+    if (Math.abs((t.scale || 1) - 1) > SCALE_TOL) qc.push(`⚠ fitted scale b = ${t.scale.toFixed(3)} deviates by more than ${SCALE_TOL * 100} % — a physically different gradient; exclude rather than correct`);
     if (Number.isFinite(slope) && slope > 0.0003) qc.push(`⚠ still rising at the endpoint (+${(slope * 1000).toFixed(1)} mOD/mm) — heavy polysomes truncated, ratio is a lower bound`);
     return { key: idx, name: t.name, color: t.color, meta: t.meta || {}, scan: t.scan || "", tot, rib, p0y: lm.p0y, aucM: am, aucP: ap, aucH: ah, a40, a60,
              mp: ap !== 0 ? am / ap : NaN, pm: am !== 0 ? ap / am : NaN, mpSd,
@@ -848,7 +880,8 @@ function computeResults(opts) {
              molar: (a60 > 0 && Number.isFinite(a40)) ? a40 / a60 / 0.35 : NaN,
              hf: heavyOn() && (am + ap) > 0 ? ah / (am + ap) : NaN, a2, a3,
              n2: lm.lad && lm.lad.n2 ? lm.lad.n2.x : null, n3: lm.lad && lm.lad.n3 ? lm.lad.n3.x : null, n4: lm.lad && lm.lad.n4 ? lm.lad.n4.x : null,
-             off: -(t.off || 0), x80: lm.x80, x60: lm.x60, x40: lm.x40, nPoly: (lm.poly || []).length,
+             off: lm.x80 != null ? +(ax_(t, lm.x80) - lm.x80).toFixed(2) : -(t.off || 0), scale: t.scale || 1,
+             x80: lm.x80, x60: lm.x60, x40: lm.x40, nPoly: (lm.poly || []).length,
              ladder: lm.verdict || "n/a", lmDev: t.lmDev, slope, qc,
              blv: mode === "min" ? baselineFn(t, "min")(0) : NaN,
              bl: mode === "none" ? "—" : (mode === "min" ? bl(0).toFixed(4) : mode) };
@@ -941,11 +974,11 @@ function render() {
   // boundary lines with drag handles
   // per-sample landmark ticks in the sample's colour: peaks at the top, valleys at the bottom
   for (const t of vis) if (t.lm && t.lm.x80 != null) {
-    for (const k of ["x40", "x60", "x80"]) if (t.lm[k] != null) { const xv = t.lm[k] - (t.off || 0);
+    for (const k of ["x40", "x60", "x80"]) if (t.lm[k] != null) { const xv = ax_(t, t.lm[k]);
       s += `<line x1="${sx(xv)}" y1="${MT+20}" x2="${sx(xv)}" y2="${MT+25}" stroke="${t.color}" stroke-width="1" opacity="0.8"/>`; }
-    if (t.lm.lad) for (const k of ["n2", "n3", "n4", "n5"]) if (t.lm.lad[k]) { const xv = t.lm.lad[k].x - (t.off || 0);
+    if (t.lm.lad) for (const k of ["n2", "n3", "n4", "n5"]) if (t.lm.lad[k]) { const xv = ax_(t, t.lm.lad[k].x);
       s += `<line x1="${sx(xv)}" y1="${MT+20}" x2="${sx(xv)}" y2="${MT+25}" stroke="${t.color}" stroke-width="1" opacity="0.8"${t.lm.lad[k].type === "shoulder" ? ' stroke-dasharray="1 1"' : ""}/>`; }
-    for (const k of ["g1", "g2", "g3", "g4"]) if (t.lm[k] != null) { const xv = t.lm[k] - (t.off || 0);
+    for (const k of ["g1", "g2", "g3", "g4"]) if (t.lm[k] != null) { const xv = ax_(t, t.lm[k]);
       s += `<line x1="${sx(xv)}" y1="${H-MB-14}" x2="${sx(xv)}" y2="${H-MB-9}" stroke="${t.color}" stroke-width="1" opacity="0.8"/>`; }
   }
   s += `</g>`;
@@ -1082,7 +1115,7 @@ function renderTable() {
     `<td>${f3(r.tot)}</td><td>${f3(r.rib)}</td><td>${f3(r.aucM)}</td><td>${f3(r.aucP)}</td>` +
     `<td class="ratio" title="± noise-propagated 1σ (random noise + a one-sigma baseline offset); range = min–max over the sensitivity grid under the current baseline">${f3(r.mp)}` +
       `<span class="sub2">${Number.isFinite(r.mpSd) ? "± " + r.mpSd.toFixed(3) : ""}${rng[r.key] ? " · " + f3(rng[r.key][0]) + "–" + f3(rng[r.key][1]) : ""}</span></td><td>${f3(r.pm)}</td><td>${f3(r.l2)}</td>` +
-    `<td>${r.off ? r.off.toFixed(2) : "0"}${Math.abs(r.off) >= 2 ? ' <span title="x-shift ≥ 2 mm — harmless if the valleys agree after alignment (see QC)">⚠</span>' : ""}</td>` +
+    `<td>${r.off ? r.off.toFixed(2) : "0"}${r.scale !== 1 ? `<span class="sub2" style="display:block;font-size:10.5px;color:#778;font-weight:400">× ${r.scale.toFixed(3)}</span>` : ""}${Math.abs(r.off) >= 2 ? ' <span title="x-shift ≥ 2 mm — harmless if the valleys agree after alignment (see QC)">⚠</span>' : ""}</td>` +
     `<td>${r.bl}</td><td style="text-align:left;font-size:12px;color:${r.qcn ? "#a04000" : "#667"}">${esc(r.qc.join("; "))}</td></tr>`).join("");
   const bs = document.getElementById("bstate");
   bs.textContent = bounds.m1 == null ? "" : autoMode ? "auto · from landmarks" : "manual";
@@ -1244,6 +1277,7 @@ function applySession(o, quiet) {
   document.getElementById("anchorsgrp").hidden = document.getElementById("bmode").value !== "anchors";
   if ("anchors" in s) document.getElementById("anchors").value = s.anchors || "";
   if ("align" in s) document.getElementById("alignx").checked = !!s.align;
+  if (s.alignMode) document.getElementById("alignmode").value = s.alignMode;
   if ("despike" in s) document.getElementById("despike").checked = !!s.despike;
   if ("cropy" in s) document.getElementById("cropy").checked = !!s.cropy;
   if ("contrasts" in s) document.getElementById("contrasts_in").value = s.contrasts || "";
@@ -1311,6 +1345,7 @@ document.getElementById("sessin").addEventListener("change", e => {
 function settingsObj() {
   const bl = traces.find(t => t.blank);
   return { version: VERSION, profile: { name: profileName, ...PROF }, t0: bounds.t0, m1: bounds.m1, m2: bounds.m2, p3: bounds.p3, h: bounds.h, ref80: REF80, baseline: document.getElementById("bmode").value,
+    alignMode: document.getElementById("alignmode").value,
     anchors: document.getElementById("anchors").value, align: document.getElementById("alignx").checked, despike: despikeOn(),
     blank: bl ? bl.name : "", contrasts: document.getElementById("contrasts_in").value,
     excluded: traces.filter(t => t.meta && t.meta.excl).map(t => t.name + ": " + t.meta.excl),
@@ -1327,7 +1362,7 @@ function tidyCsv() {
   const rows = computeResults(), S = sensitivity(), hash = settingsHash(), rng = sensRanges(S);
   const M = [["total_auc", r => r.tot], ["ribosomal_auc", r => r.rib], ["first_peak_od", r => r.p0y], ["auc_monosome", r => r.aucM], ["auc_polysomes", r => r.aucP], ["poly_over_mono", r => r.pm],
     ["mono_over_poly", r => r.mp], ["log2_poly_over_mono", r => r.l2], ["polysome_fraction", r => r.pf], ["a40", r => r.a40], ["a60", r => r.a60],
-    ["free_subunit_fraction", r => r.fs], ["molar_40s_60s", r => r.molar], ["a2_disome", r => r.a2], ["a3_trisome", r => r.a3], ["heavy_fraction", r => r.hf], ["x_shift_mm", r => r.off],
+    ["free_subunit_fraction", r => r.fs], ["molar_40s_60s", r => r.molar], ["a2_disome", r => r.a2], ["a3_trisome", r => r.a3], ["heavy_fraction", r => r.hf], ["x_shift_mm", r => r.off], ["x_scale", r => r.scale],
     ["end_slope_od_per_mm", r => r.slope], ["mono_over_poly_sd_noise", r => r.mpSd],
     ["mono_over_poly_sens_min", r => rng[r.key] ? rng[r.key][0] : NaN], ["mono_over_poly_sens_max", r => rng[r.key] ? rng[r.key][1] : NaN]];
   const head = "sample,block,group,loaded_a260,scan_time,excluded,exclude_reason,ladder,qc,metric,value,settings_hash,tool_version\n";
@@ -1347,7 +1382,10 @@ function renderLandmarkLine() {
   const el = document.getElementById("lmline");
   if (!landmarks) { el.innerHTML = ""; return; }
   const g = landmarks, f = v => v == null ? "—" : v.toFixed(1);
-  el.innerHTML = `<b>Landmarks (aligned, consensus of ${traces.filter(t => t.visible && !t.blank && t.lm && t.lm.x80 != null).length} samples):</b>${HELP_ICON("pipeline")} ` +
+  const sc = traces.filter(t => t.visible && !t.blank && Number.isFinite(t.scale) && t.scale !== 1).map(t => t.scale);
+  const alignTxt = document.getElementById("alignx").checked
+    ? (document.getElementById("alignmode").value === "affine" && sc.length ? `shift + scale (b ${Math.min(...sc).toFixed(3)}–${Math.max(...sc).toFixed(3)})` : "shift only") : "off";
+  el.innerHTML = `<b>Landmarks (aligned, consensus of ${traces.filter(t => t.visible && !t.blank && t.lm && t.lm.x80 != null).length} samples; alignment: ${alignTxt}):</b>${HELP_ICON("pipeline")} ` +
     `first-peak onset ${f(g.t0)} · 40S ${f(g.x40)} · 60S ${f(g.x60)} · 80S ${f(g.x80)} mm; valleys g1 ${f(g.g1)} · g2 ${f(g.g2)} · g3 ${f(g.g3)} · g4 ${f(g.g4)} mm; ` +
     `polysomes 2× ${f(g.n2)} · 3× ${f(g.n3)} · 4× ${f(g.n4)}${g.n5 != null ? " · 5× " + f(g.n5) : ""} mm (valleys 2|3 ${f(g.v23)} · 3|4 ${f(g.v34)}${g.v45 != null ? " · 4|5 " + f(g.v45) : ""}); ` +
     `common endpoint ${f(g.end)} mm. Valley spread across samples: g1 ${f(g.g1_spread)} · g2 ${f(g.g2_spread)} · g3 ${f(g.g3_spread)} · g4 ${f(g.g4_spread)} mm — ` +
@@ -1422,13 +1460,13 @@ document.getElementById("dl").addEventListener("click", () => {
   const rows = computeResults(), rngC = sensRanges(sensitivity());
   const head = "sample,total_auc,ribosomal_auc,first_peak_od,auc_monosome,auc_polysomes,mono_over_poly,mono_over_poly_sd_noise,mono_over_poly_sens_min,mono_over_poly_sens_max,poly_over_mono,log2_poly_over_mono," +
                "polysome_fraction,a40,a60,free_subunit_fraction,molar_40s_60s,a2_disome,a3_trisome,auc_heavy,heavy_fraction,n2_mm,n3_mm,n4_mm," +
-               "x_shift_mm,x40_mm,x60_mm,x80_mm,polysome_peaks,ladder,end_slope_od_per_mm,qc," +
+               "x_shift_mm,x_scale,x40_mm,x60_mm,x80_mm,polysome_peaks,ladder,end_slope_od_per_mm,qc," +
                "total_from_mm,mono_from_mm,mono_to_mm,poly_to_mm,heavy_from_mm,ref_80s_mm,baseline_mode,baseline_anchors_mm,despike,blank,block,group,loaded_a260,scan_time,settings_hash,tool_version\n";
   const mode = document.getElementById("bmode").value, blank = traces.find(t => t.blank);
   const n5 = v => Number.isFinite(v) ? v.toFixed(5) : "";
   const body = rows.map(r => [JSON.stringify(r.name), n5(r.tot), n5(r.rib), n5(r.p0y), n5(r.aucM), n5(r.aucP),
     n5(r.mp), n5(r.mpSd), n5(rngC[r.key] ? rngC[r.key][0] : NaN), n5(rngC[r.key] ? rngC[r.key][1] : NaN), n5(r.pm), n5(r.l2), n5(r.pf), n5(r.a40), n5(r.a60), n5(r.fs), n5(r.molar), n5(r.a2), n5(r.a3), n5(r.aucH), n5(r.hf), r.n2 ?? "", r.n3 ?? "", r.n4 ?? "",
-    (r.off || 0).toFixed(2), r.x40 ?? "", r.x60 ?? "", r.x80 ?? "", r.nPoly, JSON.stringify(r.ladder), n5(r.slope), JSON.stringify(r.qc.join("; ")),
+    (r.off || 0).toFixed(2), r.scale.toFixed(4), r.x40 ?? "", r.x60 ?? "", r.x80 ?? "", r.nPoly, JSON.stringify(r.ladder), n5(r.slope), JSON.stringify(r.qc.join("; ")),
     Number.isFinite(bounds.t0) ? bounds.t0 : "", bounds.m1, bounds.m2, bounds.p3, heavyOn() ? bounds.h : "", REF80, mode,
     JSON.stringify(mode === "anchors" ? parseAnchors().join(" ") : ""), despikeOn() ? "on" : "off",
     JSON.stringify(blank ? blank.name : ""), JSON.stringify(r.meta.block || ""), JSON.stringify(r.meta.group || ""),
@@ -1474,6 +1512,7 @@ document.getElementById("dltidy").addEventListener("click", () => {
 });
 document.getElementById("cropy").addEventListener("change", render);
 document.getElementById("alignx").addEventListener("change", render);
+document.getElementById("alignmode").addEventListener("change", render);
 document.getElementById("despike").addEventListener("change", render);
 document.getElementById("clearall").addEventListener("click", () => {
   traces.length = 0; pendingMeta = {}; xZoom = null; locked = false;
@@ -1621,19 +1660,19 @@ function buildXlsx() {
   // Summary sheet
   const sHead = ["Sample","Total AUC","Ribosomal AUC","First peak (OD)","AUC monosome","AUC polysomes","Mono / Poly","Poly / Mono","log2 (Poly / Mono)",
                  "Polysome fraction","A40","A60","Free-subunit fraction","Molar 40S:60S","A2 (disome)","A3 (trisome)","AUC heavy","Heavy fraction",
-                 "x-shift (mm)","x-shift flag","40S (mm)","60S (mm)","80S (mm)","Polysome ladder","End slope (OD/mm)","Baseline","QC",
+                 "x-shift (mm)","x-scale","x-shift flag","40S (mm)","60S (mm)","80S (mm)","Polysome ladder","End slope (OD/mm)","Baseline","QC",
                  "Block","Group","Loaded A260","Scan time"];
   let sm = `<row r="1">` + sHead.map((h, c) => cellS(1, c + 1, h)).join("") + `</row>`;
   // numeric cell only for finite values — <v>NaN</v> is invalid OOXML
   const cellV = (rn, c, v, d) => Number.isFinite(v) ? cellN(rn, c, v.toFixed(d)) : cellS(rn, c, "n/a");
   rows.forEach((r, i) => {
     const rn = i + 2;
-    const V = [r.tot, r.rib, r.p0y, r.aucM, r.aucP, r.mp, r.pm, r.l2, r.pf, r.a40, r.a60, r.fs, r.molar, r.a2, r.a3, r.aucH, r.hf, r.off || 0];
-    sm += `<row r="${rn}">` + cellS(rn, 1, r.name) + V.map((v, k) => cellV(rn, k + 2, v, k === 12 ? 3 : k === 17 ? 2 : 5)).join("") +
-      cellS(rn, 20, Math.abs(r.off) >= 2 ? "shift >= 2 mm (check valley agreement)" : "") +
-      cellV(rn, 21, r.x40, 1) + cellV(rn, 22, r.x60, 1) + cellV(rn, 23, r.x80, 1) + cellS(rn, 24, r.ladder) + cellV(rn, 25, r.slope, 5) +
-      cellS(rn, 26, r.bl) + cellS(rn, 27, r.qc.join("; ")) + cellS(rn, 28, r.meta.block || "") + cellS(rn, 29, r.meta.group || "") +
-      cellV(rn, 30, r.meta.a260, 3) + cellS(rn, 31, r.scan || "") + `</row>`;
+    const V = [r.tot, r.rib, r.p0y, r.aucM, r.aucP, r.mp, r.pm, r.l2, r.pf, r.a40, r.a60, r.fs, r.molar, r.a2, r.a3, r.aucH, r.hf, r.off || 0, r.scale];
+    sm += `<row r="${rn}">` + cellS(rn, 1, r.name) + V.map((v, k) => cellV(rn, k + 2, v, k === 12 ? 3 : k === 17 ? 2 : k === 18 ? 4 : 5)).join("") +
+      cellS(rn, 21, Math.abs(r.off) >= 2 ? "shift >= 2 mm (check valley agreement)" : "") +
+      cellV(rn, 22, r.x40, 1) + cellV(rn, 23, r.x60, 1) + cellV(rn, 24, r.x80, 1) + cellS(rn, 25, r.ladder) + cellV(rn, 26, r.slope, 5) +
+      cellS(rn, 27, r.bl) + cellS(rn, 28, r.qc.join("; ")) + cellS(rn, 29, r.meta.block || "") + cellS(rn, 30, r.meta.group || "") +
+      cellV(rn, 31, r.meta.a260, 3) + cellS(rn, 32, r.scan || "") + `</row>`;
   });
   const setRow0 = rows.length + 3;
   const fitY = document.getElementById("cropy").checked;
@@ -1646,7 +1685,7 @@ function buildXlsx() {
     ["Landmarks, aligned mm (40S/60S/80S; g1..g4; end)", landmarks ? `${Lm.x40 ?? "-"} / ${Lm.x60 ?? "-"} / ${Lm.x80}; ${Lm.g1 ?? "-"} ${Lm.g2 ?? "-"} ${Lm.g3 ?? "-"} ${Lm.g4 ?? "-"}; ${Lm.end}` : "none"],
     ["Polysome ladder, aligned mm (2x/3x/4x/5x; valleys 2|3, 3|4, 4|5)", landmarks ? `${Lm.n2 ?? "-"} / ${Lm.n3 ?? "-"} / ${Lm.n4 ?? "-"} / ${Lm.n5 ?? "-"}; ${Lm.v23 ?? "-"} ${Lm.v34 ?? "-"} ${Lm.v45 ?? "-"}` : "none"],
     ["Baseline mode", mode], ["Baseline anchors (mm)", mode === "anchors" ? parseAnchors().join(", ") : "—"],
-    ["Peak alignment", document.getElementById("alignx").checked ? "on" : "off"],
+    ["Peak alignment", document.getElementById("alignx").checked ? (document.getElementById("alignmode").value === "affine" ? "shift + scale (landmark least squares)" : "shift only") : "off"],
     ["Spike removal (Hampel)", despikeOn() ? "on" : "off"],
     ["Chart y-axis fit to regions", fitY ? "on" : "off"],
     ["Excluded samples (reason)", traces.filter(t => t.meta && t.meta.excl).map(t => t.name + ": " + t.meta.excl).join("; ") || "none"],
