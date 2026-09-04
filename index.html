@@ -187,6 +187,7 @@
     <span style="border-left:1px solid var(--line);height:20px"></span>
     <button id="sesssave" title="Save boundaries, settings, profile, sample metadata, contrasts and lock state as a small JSON file (no trace data)">Save session</button>
     <button id="sessload" title="Restore a saved session; load the same CSV files again, their metadata is re-applied by sample name">Load session</button>
+    <button id="sessshare" title="Copy a link that restores this session's settings and sample metadata (no trace data); the recipient loads the same CSV files">Share session</button>
     <input type="file" id="sessin" accept=".json" style="display:none"><a class="hl" href="#help" data-help="files" title="Help: session files">ⓘ</a>
   </div>
   <div id="sessline" class="sessline"></div>
@@ -329,7 +330,7 @@
     <h3>Display</h3>
     <p>“Fit y-axis” only zooms the display to the mono/poly regions; it never changes numbers. Hover the chart for the position and every sample's OD; drag on the background to zoom into an x-range, double-click to reset. Excluded samples stay on the chart, dimmed and dashed.</p>
     <h3>Session files</h3>
-    <p><b>Save session</b> writes a small JSON with boundaries, baseline, alignment, profile, blank, contrasts, lock state and every sample's block/group/A260/exclusion — no trace data. <b>Load session</b> restores it; load the same CSV files again and the metadata is re-applied by sample name. The page also autosaves the current state in the browser and restores it on the next visit; <b>Clear all</b> discards that autosave.</p>
+    <p><b>Save session</b> writes a small JSON with boundaries, baseline, alignment, profile, blank, contrasts, lock state and every sample's block/group/A260/exclusion — no trace data. <b>Load session</b> restores it; load the same CSV files again and the metadata is re-applied by sample name. <b>Share session</b> copies a link carrying the same information in the URL fragment (compressed; the part after <code>#</code> never leaves the browser, so nothing is sent to any server) — a colleague who opens it and loads the same CSV files sees the identical analysis. The page also autosaves the current state in the browser and restores it on the next visit (a share link takes precedence); <b>Clear all</b> discards that autosave.</p>
     <h3>Exports</h3>
     <table><tr><th>export</th><th>contents</th></tr>
       <tr><td>Results CSV</td><td>one row per sample: all columns of both tables, QC, boundaries, baseline, alignment reference, blank, metadata, settings hash</td></tr>
@@ -1272,6 +1273,34 @@ document.getElementById("sesssave").addEventListener("click", () => {
   a.download = "polysome_session.json"; a.click();
 });
 document.getElementById("sessload").addEventListener("click", () => document.getElementById("sessin").click());
+// share: session config in the URL fragment (never sent to the server), deflate + base64url
+const b64u = u8 => btoa(String.fromCharCode(...u8)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const unb64u = s => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+async function encodeSession(obj) {
+  const bytes = new TextEncoder().encode(JSON.stringify(obj));
+  if (typeof CompressionStream === "function") {
+    const buf = await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate-raw"))).arrayBuffer();
+    return "z." + b64u(new Uint8Array(buf));
+  }
+  return "j." + b64u(bytes);
+}
+async function decodeSession(s) {
+  const kind = s.slice(0, 2), body = s.slice(2);
+  if (kind === "z.") {
+    const buf = await new Response(new Blob([unb64u(body)]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer();
+    return JSON.parse(new TextDecoder().decode(buf));
+  }
+  return JSON.parse(new TextDecoder().decode(unb64u(body)));
+}
+async function shareUrl() {
+  const enc = await encodeSession(sessionObj());
+  return location.origin + location.pathname + "#s=" + enc;
+}
+document.getElementById("sessshare").addEventListener("click", async () => {
+  const url = await shareUrl(), line = document.getElementById("sessline");
+  try { await navigator.clipboard.writeText(url); line.textContent = `Share link copied (${url.length} characters): it restores settings, profile, contrasts and sample metadata — the recipient loads the same CSV files.`; }
+  catch (e) { window.prompt("Copy this link:", url); }
+});
 document.getElementById("sessin").addEventListener("change", e => {
   const f = e.target.files[0]; if (!f) return;
   const rd = new FileReader();
@@ -1810,19 +1839,27 @@ for (const k of ["ref80", "lmStart", "w80lo", "w80hi", "stepLo", "stepHi", "g4lo
     const v = parseFloat(e.target.value); if (!Number.isFinite(v)) return;
     applyProfile({ ...PROF, [k]: v }, "custom"); render();
   });
-// restore the autosaved session (settings + sample metadata; files must be loaded again)
-try {
-  const raw = localStorage.getItem("pav_session");
-  if (raw) { const o = JSON.parse(raw); if (applySession(o, true))
-    document.getElementById("sessline").textContent = `Settings and sample metadata restored from the autosave of ${o.saved ? o.saved.replace("T", " ").slice(0, 16) : "?"} — load the CSV files again; “Clear all” discards the autosave.`; }
-} catch (e) {}
+// restore a session from a share link (#s=…) or, failing that, from the autosave
+(async () => {
+  const m = location.hash.match(/^#s=(.+)$/);
+  if (m) {
+    try { const o = await decodeSession(decodeURIComponent(m[1])); if (applySession(o, true)) {
+      document.getElementById("sessline").textContent = `Session restored from the share link (saved ${o.saved ? o.saved.replace("T", " ").slice(0, 16) : "?"}, tool v${o.version || "?"}) — load the CSV files to see the results.`; return; } }
+    catch (e) { document.getElementById("sessline").textContent = "The share link could not be decoded."; }
+  }
+  try {
+    const raw = localStorage.getItem("pav_session");
+    if (raw) { const o = JSON.parse(raw); if (applySession(o, true))
+      document.getElementById("sessline").textContent = `Settings and sample metadata restored from the autosave of ${o.saved ? o.saved.replace("T", " ").slice(0, 16) : "?"} — load the CSV files again; “Clear all” discards the autosave.`; }
+  } catch (e) {}
+})();
 
 // tiny hook so the tool can be driven for automated testing (harmless in normal use)
 window.__pav = { addFileText, setBounds: (a,b,c,h,t0) => { bounds.m1=a; bounds.m2=b; bounds.p3=c; bounds.h = h ?? null;
   if (t0 !== undefined) bounds.t0 = t0; autoMode = false; syncInputs(); render(); },
   results: computeResults, traces: () => traces, buildXlsx, sensitivity, autoBounds, landmarks: () => landmarks,
   setBlank: i => { traces.forEach((t, k) => { t.blank = (k === i); if (t.blank) t.visible = false; }); renderTraceList(); render(); },
-  tidyCsv, settingsHash, contrastTable, scalePairs, sessionObj, applySession, applyProfile, profile: () => PROF,
+  tidyCsv, settingsHash, contrastTable, scalePairs, sessionObj, applySession, applyProfile, profile: () => PROF, shareUrl, decodeSession,
   setZoom: z => { xZoom = z; render(); } };
 </script>
 </body>
