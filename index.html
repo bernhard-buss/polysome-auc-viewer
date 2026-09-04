@@ -152,6 +152,8 @@
         <span title="The most prominent peak in this raw-position window is taken as the 80S">80S window (mm)</span><span><input type="number" id="pf_w80lo" step="0.5"> <span class="dim">to</span> <input type="number" id="pf_w80hi" step="0.5"></span>
         <span title="Allowed distance from the 80S to the 60S, and from the 60S to the 40S">subunit step (mm)</span><span><input type="number" id="pf_stepLo" step="0.5"> <span class="dim">to</span> <input type="number" id="pf_stepHi" step="0.5"></span>
         <span title="The 80S|polysome valley g4 is the minimum inside this offset from the 80S">g4 offset from 80S (mm)</span><span><input type="number" id="pf_g4lo" step="0.5"> <span class="dim">to</span> <input type="number" id="pf_g4hi" step="0.5"></span>
+        <span title="The disome is searched this many 60S→80S steps after the 80S (ΔS 80→120 is twice ΔS 60→80)">disome window (× subunit step)</span><span><input type="number" id="pf_d2lo" step="0.1"> <span class="dim">to</span> <input type="number" id="pf_d2hi" step="0.1"></span>
+        <span title="Each next n-mer is searched at this fraction of the previous spacing (spacings shrink with n)">spacing ratio n→n+1</span><span><input type="number" id="pf_spLo" step="0.05"> <span class="dim">to</span> <input type="number" id="pf_spHi" step="0.05"></span>
       </div>
     </details>
   </div>
@@ -234,15 +236,17 @@
       <tr><td>g1</td><td>void tail | 40S</td><td>start of the ribosomal AUC and of A40</td></tr>
       <tr><td>g2</td><td>40S | 60S</td><td>A40 / A60 split</td></tr>
       <tr><td>g3</td><td>60S | 80S</td><td>monosome start</td></tr>
-      <tr><td>g4</td><td>80S | polysomes (minimum in 80S + 6…12 mm)</td><td>monosome end / polysome start</td></tr>
+      <tr><td>g4</td><td>80S | polysomes (minimum in 80S + 6…12 mm)</td><td>monosome end / polysome start = disome region start</td></tr>
+      <tr><td>2|3, 3|4, 4|5</td><td>valleys between the assigned n-mers (detrended minima)</td><td>disome / trisome regions; heavy (≥4-mer) starts at 3|4</td></tr>
       <tr><td>end</td><td>—</td><td>polysome end: common endpoint of all loaded samples</td></tr></table>
     <p><b>Total AUC</b> starts at the onset of the very first data peak, so it includes the free-RNA peak and excludes only the start artefacts before it.</p>
     <h3>Gradient profile (advanced)</h3>
     <p>The landmark search assumes a geometry: where the void ends, where the 80S can be, how far apart the subunit peaks sit, where to look for g4, and the aligned 80S reference. The defaults are for 10–50 % sucrose in an SW41 tube. For a different gradient, adjust them in the <b>Gradient profile</b> group (the preset switches to “custom”); the profile is part of the settings hash and of every export. A QC flag warns when a peak outside the 80S window is more prominent than the chosen 80S — the usual symptom of a wrong window.</p>
     <h3>Pure-offset test</h3>
     <p>If every sample's g1–g3 valleys sit within 1.5 mm of the consensus after alignment, the x-shifts are a pure meniscus-detection offset and the gradients are physically equivalent. A larger deviation means that gradient differs in scale; a single shift cannot align it, and the sample is flagged.</p>
-    <h3>Ladder verdict</h3>
-    <p>“Resolved” requires the first peak after the 80S to sit 1.1–2.0× the 60S→80S step away (a disome) and at least three polysome peaks with shrinking spacings. Without a resolved ladder, per-peak metrics (heavy fraction, ribosomes per mRNA) are not meaningful — Poly/Mono still is.</p>
+    <h3>Polysome ladder (2-, 3-, 4-, 5-mer)</h3>
+    <p>Polysome peaks are small (a few mOD on a rising hump), so they are searched with a relaxed threshold — peaks with prominence ≥ max(0.0008 OD, 1.5σ) plus curvature shoulders (minima of the second derivative of a 3 mm smooth) — inside physics-based windows: the disome 1.6–2.7 subunit steps after the 80S (ΔS from 80S to ~120S is twice the 60S→80S ΔS), each next n-mer at 0.4–0.9 of the previous spacing (spacings shrink with n). In each window the most prominent real peak wins; a shoulder counts only when no peak exists (dotted tick, letter “s” in the verdict). Valleys between assigned n-mers are minima of the segment after removing the line joining the two apexes, so they exist even on a rising hump. The consensus positions (medians over samples) label the chart as 2×, 3×, 4×, and the <b>heavy boundary is auto-set at the 3|4 valley</b> when 2-, 3- and 4-mer are assigned; A2/A3 in the extended table are the disome and trisome regions.</p>
+    <p>Verdict: <em>resolved</em> = 2-, 3- and 4-mer assigned; <em>partial</em> = disome only; <em>unresolved</em> = no candidate in the disome window. The halfmer (80S + 40S, ~100S) often appears as a shoulder ~7–10 mm after the 80S and is deliberately not assigned; it stays inside the monosome window that ends at g4.</p>
   </section>
 
   <section data-tab="baseline" hidden>
@@ -273,7 +277,9 @@
       <tr><td>Poly fraction</td><td>Apoly / (Apoly + A80)</td></tr>
       <tr><td>Free-subunit fraction</td><td>(A40 + A60) / ribosomal AUC</td></tr>
       <tr><td>Molar 40S:60S</td><td>A40/A60 ÷ 0.35 — A260 scales with rRNA mass (18S ≈ 1.9 kb vs 28S+5.8S+5S ≈ 5.3 kb), so equimolar subunits give an area ratio of ≈ 0.35</td></tr>
-      <tr><td>Heavy fraction</td><td>AUC[heavy…end] / AUC[mono+poly]; needs the optional heavy boundary and a resolved ladder</td></tr>
+      <tr><td>A2 (disome), A3 (trisome)</td><td>areas of the polysome region between g4 → 2|3 valley and 2|3 → 3|4 valley (polysome baseline)</td></tr>
+      <tr><td>Heavy fraction (≥4)</td><td>AUC[heavy…end] / AUC[mono+poly]; the heavy boundary is auto-set at the 3|4 valley when the ladder resolves, otherwise off</td></tr>
+      <tr><td>2- / 3- / 4-mer</td><td>assigned polysome peak positions, raw mm</td></tr>
       <tr><td>40S / 60S / 80S</td><td>detected peak positions, raw (unaligned) mm</td></tr>
       <tr><td>Polysome ladder</td><td>the verdict and its reason</td></tr>
       <tr><td>End slope</td><td>slope of the smoothed trace over the last 3 mm before the endpoint; positive = still rising</td></tr></table>
@@ -339,20 +345,21 @@ const COLORS = ["#e41a1c","#377eb8","#4daf4a","#984ea3","#ff7f00","#a65628",
                 "#008080","#b30059","#807dba","#e6ab02","#1b9e77","#66a61e"];
 // Bump for every change that affects computed numbers (landmarks, baselines, boundaries,
 // integration, QC thresholds); documentation/layout-only changes do not bump it. See CHANGELOG.md.
-const VERSION = "1.0";
+const VERSION = "1.1";
 document.getElementById("ver").textContent = "v" + VERSION;
 let traces = [];           // {name, x[], y[], yc[], spikes[], visible, color, file, off}
 let bounds = { t0: null, m1: null, m2: null, p3: null, h: null };
 // Gradient profile: the geometry the landmark search assumes. Editable in the
 // Profile group (advanced); part of the settings hash and of every export.
 const PROFILES = {
-  "sw41-10-50": { label: "10–50 % sucrose · SW41 (default)", ref80: 32.0, lmStart: 10, w80lo: 22, w80hi: 42, stepLo: 4, stepHi: 9.5, g4lo: 6, g4hi: 12 } };
+  "sw41-10-50": { label: "10–50 % sucrose · SW41 (default)", ref80: 32.0, lmStart: 10, w80lo: 22, w80hi: 42, stepLo: 4, stepHi: 9.5, g4lo: 6, g4hi: 12,
+                  d2lo: 1.6, d2hi: 2.7, spLo: 0.4, spHi: 0.9 } };
 let PROF = { ...PROFILES["sw41-10-50"] }, profileName = "sw41-10-50";
 let REF80 = PROF.ref80;    // aligned position of the 80S peak (mm) — fixed so windows are portable
 let LM_START = PROF.lmStart; // mm: landmark search starts after the void / sub-ribosomal spike
 function applyProfile(p, name) {
   PROF = { ...p }; REF80 = PROF.ref80; LM_START = PROF.lmStart; profileName = name || "custom";
-  for (const k of ["ref80", "lmStart", "w80lo", "w80hi", "stepLo", "stepHi", "g4lo", "g4hi"]) { const el = document.getElementById("pf_" + k); if (el) el.value = PROF[k]; }
+  for (const k of ["ref80", "lmStart", "w80lo", "w80hi", "stepLo", "stepHi", "g4lo", "g4hi", "d2lo", "d2hi", "spLo", "spHi"]) { const el = document.getElementById("pf_" + k); if (el) el.value = PROF[k]; }
   const sel = document.getElementById("pf_preset"); if (sel) sel.value = profileName;
 }
 let landmarks = null;      // session consensus of the aligned valleys {g1,g2,g3,g4,end,...}
@@ -474,17 +481,52 @@ function detectLandmarks(t) {
   if (L.x40 != null && L.x60 != null) L.g2 = vmin(L.x40, L.x60);
   L.g3 = L.x60 != null ? vmin(L.x60, L.x80) : vmin(L.x80 - 8, L.x80);
   L.g4 = vmin(L.x80 + PROF.g4lo, L.x80 + PROF.g4hi);
-  const s68 = L.x60 != null ? L.x80 - L.x60 : NaN;
-  if (!L.poly.length) { L.verdict = "unresolved: no peaks after the 80S"; return; }
-  const sp = []; let prev = L.x80; for (const p of L.poly) { sp.push(p - prev); prev = p; }
-  const disomeOK = Number.isFinite(s68) ? (sp[0] >= 1.1 * s68 && sp[0] <= 2.0 * s68) : sp[0] <= 14;
-  if (!disomeOK) L.verdict = `unresolved: first peak after the 80S is +${sp[0].toFixed(1)} mm, not a disome`;
-  else if (L.poly.length < 3) L.verdict = `unresolved: only ${L.poly.length} polysome peak(s)`;
-  else {
-    let ok = true; for (let i = 1; i < sp.length; i++) if (sp[i] >= sp[i - 1]) { ok = false; break; }
-    L.verdict = ok ? `resolved (${L.poly.length} peaks)` : "unresolved: spacings not shrinking";
-    L.nLadder = ok ? L.poly.length : 0;
+  // ---- polysome ladder: windowed assignment of the 2-, 3-, 4-, 5-mer ----
+  // candidates: relaxed peaks (prominence >= max(0.0008 OD, 1.5 sigma)) plus curvature
+  // shoulders (minima of the 2nd derivative of a 3 mm smooth); the disome is searched
+  // d2lo..d2hi subunit steps after the 80S, each next n-mer at spLo..spHi of the previous
+  // spacing; the most prominent real peak in a window wins, otherwise the first shoulder
+  const s68 = L.x60 != null ? L.x80 - L.x60 : NaN, step = Number.isFinite(s68) ? s68 : 7.0;
+  L.s68 = s68;
+  const lo = L.x80 + 3, hi = Math.min(L.x80 + 40, x[n - 1] - 1);
+  const relaxed = findPeaks(x, s, Math.max(0.0008, 1.5 * sigma), 1.2, lo, hi);
+  const strength = new Map(relaxed.map(p => [+p.x.toFixed(2), p.prom]));
+  const s31 = sgSmooth(Y_(t), Math.max(3, Math.round(1.5 / dxOf(t))));
+  const nd2 = new Array(n).fill(0); for (let i = 1; i < n - 1; i++) nd2[i] = -(s31[i + 1] - 2 * s31[i] + s31[i - 1]);
+  const absd2 = []; for (let i = 1; i < n - 1; i++) if (x[i] >= lo && x[i] <= hi) absd2.push(Math.abs(nd2[i]));
+  const shPk = absd2.length > 20 ? findPeaks(x, nd2, absd2.slice().sort((a, b) => a - b)[Math.floor(absd2.length * 0.6)], 1.2, lo, hi) : [];
+  const cand = [...new Set(relaxed.map(p => +p.x.toFixed(2)).concat(shPk.map(p => +p.x.toFixed(2))))].sort((a, b) => a - b);
+  const pick = (a, b) => { const c = cand.filter(v => v >= a && v <= b); if (!c.length) return null;
+    let best = c[0], bs = strength.get(c[0]) || 0; for (const v of c) { const sv = strength.get(v) || 0; if (sv > bs) { best = v; bs = sv; } }
+    return { x: best, type: strength.has(best) ? "peak" : "shoulder" }; };
+  const detrMin = (a, b) => { const ya = interpRawS(s, x, a), yb = interpRawS(s, x, b); let bi = -1, bv = Infinity;
+    for (let i = 0; i < n; i++) if (x[i] > a && x[i] < b) { const d = s[i] - (ya + (x[i] - a) / (b - a) * (yb - ya)); if (d < bv) { bv = d; bi = i; } }
+    return bi < 0 ? null : x[bi]; };
+  const lad = { n2: null, n3: null, n4: null, n5: null, v23: null, v34: null, v45: null, defaultStep: !Number.isFinite(s68) };
+  lad.n2 = pick(L.x80 + PROF.d2lo * step, L.x80 + PROF.d2hi * step);
+  let prev = lad.n2 ? lad.n2.x : null, spc = lad.n2 ? lad.n2.x - L.x80 : null;
+  for (const k of ["n3", "n4", "n5"]) {
+    if (prev == null) break;
+    const nx = pick(prev + PROF.spLo * spc, prev + PROF.spHi * spc);
+    lad[k] = nx; if (nx) { spc = nx.x - prev; prev = nx.x; } else prev = null;
   }
+  if (lad.n2 && lad.n3) lad.v23 = detrMin(lad.n2.x, lad.n3.x);
+  if (lad.n3 && lad.n4) lad.v34 = detrMin(lad.n3.x, lad.n4.x);
+  if (lad.n4 && lad.n5) lad.v45 = detrMin(lad.n4.x, lad.n5.x);
+  L.lad = lad;
+  const off = k => lad[k] ? `+${(lad[k].x - L.x80).toFixed(1)}` : null, ty = k => lad[k] ? lad[k].type[0] : "";
+  const found = ["n2", "n3", "n4", "n5"].filter(k => lad[k]);
+  L.nLadder = found.length;
+  if (lad.n2 && lad.n3 && lad.n4)
+    L.verdict = `resolved: 2-/3-/4-mer at ${off("n2")}/${off("n3")}/${off("n4")} mm (${ty("n2")}${ty("n3")}${ty("n4")}${lad.n5 ? ", 5-mer " + off("n5") + " " + ty("n5") : ""})` +
+                (lad.defaultStep ? " — 60S not found, default subunit step used" : "");
+  else if (lad.n2) L.verdict = `partial: disome at ${off("n2")} mm (${lad.n2.type})${lad.n3 ? ", trisome " + off("n3") : ""}, no tetrasome`;
+  else L.verdict = `unresolved: no disome ${(PROF.d2lo * step).toFixed(0)}–${(PROF.d2hi * step).toFixed(0)} mm after the 80S`;
+}
+function interpRawS(s, x, q) {                // series s (on raw x) at raw position q
+  if (q <= x[0]) return s[0]; if (q >= x[x.length - 1]) return s[s.length - 1];
+  let lo = 0, hi = x.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; (x[m] <= q) ? lo = m : hi = m; }
+  return s[lo] + (q - x[lo]) / (x[hi] - x[lo]) * (s[hi] - s[lo]);
 }
 
 function interpRaw(t, x) {                    // linear interpolation of the RAW series at raw x
@@ -554,6 +596,10 @@ function consensusLandmarks() {
   g.x40 = X("x40").length ? +median(X("x40")).toFixed(1) : null;
   g.x60 = X("x60").length ? +median(X("x60")).toFixed(1) : null;
   g.x80 = +median(X("x80")).toFixed(1);
+  for (const k of ["n2", "n3", "n4", "n5"]) { const a = vis.map(t => t.lm.lad && t.lm.lad[k] ? +(t.lm.lad[k].x - (t.off || 0)).toFixed(2) : NaN).filter(Number.isFinite);
+    g[k] = a.length >= Math.max(1, Math.ceil(vis.length / 2)) ? +median(a).toFixed(1) : null; g[k + "_n"] = a.length; }
+  for (const k of ["v23", "v34", "v45"]) { const a = vis.map(t => t.lm.lad && t.lm.lad[k] != null ? +(t.lm.lad[k] - (t.off || 0)).toFixed(2) : NaN).filter(Number.isFinite);
+    g[k] = a.length >= Math.max(1, Math.ceil(vis.length / 2)) ? +median(a).toFixed(1) : null; g[k + "_spread"] = a.length ? +(Math.max(...a) - Math.min(...a)).toFixed(1) : NaN; }
   g.end = +(Math.min(...vis.map(t => px_(t, t.x.length - 1))) - 0.5).toFixed(1);
   const t0s = vis.map(t => t.lm.t0 != null ? +(t.lm.t0 - (t.off || 0)).toFixed(2) : NaN).filter(Number.isFinite);
   g.t0 = t0s.length ? +median(t0s).toFixed(1) : null;
@@ -567,7 +613,7 @@ function consensusLandmarks() {
 function autoBounds() {
   if (!landmarks || landmarks.g3 == null || landmarks.g4 == null) return false;
   bounds.t0 = landmarks.t0 != null ? landmarks.t0 : landmarks.g1; bounds.m1 = landmarks.g3; bounds.m2 = landmarks.g4; bounds.p3 = landmarks.end;
-  if (bounds.h != null && !(bounds.h > bounds.m2 && bounds.h < bounds.p3)) bounds.h = null;
+  bounds.h = (landmarks.v34 != null && landmarks.v34 > bounds.m2 + 0.5 && landmarks.v34 < bounds.p3 - 0.5) ? landmarks.v34 : null;
   autoMode = true; syncInputs(); return true;
 }
 function syncInputs() {
@@ -748,6 +794,11 @@ function computeResults(opts) {
     const t0 = (Number.isFinite(bounds.t0) && bounds.t0 < bounds.m1) ? bounds.t0 : bounds.m1;
     const tot = aucRegion(t, t0, bounds.p3, bl);
     const ah = heavyOn() ? aucRegion(t, bounds.h, bounds.p3, bl) : NaN;
+    // n-mer regions from the consensus valleys: disome g4..v23, trisome v23..v34
+    const v23 = landmarks && landmarks.v23 != null && landmarks.v23 > bounds.m2 && landmarks.v23 < bounds.p3 ? landmarks.v23 : null;
+    const v34 = landmarks && landmarks.v34 != null && v23 != null && landmarks.v34 > v23 && landmarks.v34 < bounds.p3 ? landmarks.v34 : null;
+    const a2 = v23 != null ? aucRegion(t, bounds.m2, v23, bl) : NaN;
+    const a3 = v34 != null ? aucRegion(t, v23, v34, bl) : NaN;
     // sub-polysomal peaks (40S, 60S): valley-to-valley baseline through g1-g2-g3 (resolved peaks
     // on the sloping tail of the void spike) — only when the landmarks exist and are ordered
     let a40 = NaN, a60 = NaN;
@@ -794,7 +845,8 @@ function computeResults(opts) {
              pf: (am + ap) > 0 ? ap / (am + ap) : NaN,
              fs: (rib > 0 && Number.isFinite(a40) && Number.isFinite(a60)) ? (a40 + a60) / rib : NaN,
              molar: (a60 > 0 && Number.isFinite(a40)) ? a40 / a60 / 0.35 : NaN,
-             hf: heavyOn() && (am + ap) > 0 ? ah / (am + ap) : NaN,
+             hf: heavyOn() && (am + ap) > 0 ? ah / (am + ap) : NaN, a2, a3,
+             n2: lm.lad && lm.lad.n2 ? lm.lad.n2.x : null, n3: lm.lad && lm.lad.n3 ? lm.lad.n3.x : null, n4: lm.lad && lm.lad.n4 ? lm.lad.n4.x : null,
              off: -(t.off || 0), x80: lm.x80, x60: lm.x60, x40: lm.x40, nPoly: (lm.poly || []).length,
              ladder: lm.verdict || "n/a", lmDev: t.lmDev, slope, qc,
              blv: mode === "min" ? baselineFn(t, "min")(0) : NaN,
@@ -890,6 +942,8 @@ function render() {
   for (const t of vis) if (t.lm && t.lm.x80 != null) {
     for (const k of ["x40", "x60", "x80"]) if (t.lm[k] != null) { const xv = t.lm[k] - (t.off || 0);
       s += `<line x1="${sx(xv)}" y1="${MT+20}" x2="${sx(xv)}" y2="${MT+25}" stroke="${t.color}" stroke-width="1" opacity="0.8"/>`; }
+    if (t.lm.lad) for (const k of ["n2", "n3", "n4", "n5"]) if (t.lm.lad[k]) { const xv = t.lm.lad[k].x - (t.off || 0);
+      s += `<line x1="${sx(xv)}" y1="${MT+20}" x2="${sx(xv)}" y2="${MT+25}" stroke="${t.color}" stroke-width="1" opacity="0.8"${t.lm.lad[k].type === "shoulder" ? ' stroke-dasharray="1 1"' : ""}/>`; }
     for (const k of ["g1", "g2", "g3", "g4"]) if (t.lm[k] != null) { const xv = t.lm[k] - (t.off || 0);
       s += `<line x1="${sx(xv)}" y1="${H-MB-14}" x2="${sx(xv)}" y2="${H-MB-9}" stroke="${t.color}" stroke-width="1" opacity="0.8"/>`; }
   }
@@ -903,11 +957,11 @@ function render() {
     s += `</g>`; }
   // consensus landmark ticks (aligned): 40S / 60S / 80S peaks and the g1..g4 valleys
   if (landmarks) {
-    for (const [k, lab] of [["x40", "40S"], ["x60", "60S"], ["x80", "80S"]]) if (landmarks[k] != null)
+    for (const [k, lab] of [["x40", "40S"], ["x60", "60S"], ["x80", "80S"], ["n2", "2×"], ["n3", "3×"], ["n4", "4×"], ["n5", "5×"]]) if (landmarks[k] != null)
       s += `<line x1="${sx(landmarks[k])}" y1="${MT}" x2="${sx(landmarks[k])}" y2="${MT+8}" stroke="#333"/>` +
            `<text x="${sx(landmarks[k])}" y="${MT+18}" font-size="10" text-anchor="middle" fill="#333">${lab}</text>`;
-    for (const k of ["g1", "g2", "g3", "g4"]) if (landmarks[k] != null)
-      s += `<text x="${sx(landmarks[k])}" y="${H-MB-4}" font-size="9.5" text-anchor="middle" fill="#888">${k}</text>`;
+    for (const [k, lab] of [["g1", "g1"], ["g2", "g2"], ["g3", "g3"], ["g4", "g4"], ["v23", "2|3"], ["v34", "3|4"], ["v45", "4|5"]]) if (landmarks[k] != null)
+      s += `<text x="${sx(landmarks[k])}" y="${H-MB-4}" font-size="9.5" text-anchor="middle" fill="#888">${lab}</text>`;
   }
   const BL = [["m1", "#377eb8", "mono ▸"], ["m2", "#555", "◂ mono | poly ▸"], ["p3", "#e6550d", "◂ poly"]];
   if (heavyOn()) BL.splice(2, 0, ["h", "#984ea3", "heavy ▸"]);
@@ -1047,13 +1101,14 @@ function renderExtended(rows) {
   let h = `<div style="margin-top:12px"><b>Extended metrics</b>${HELP_ICON("metrics")} <span class="note">— A40/A60 use a valley-to-valley baseline (g1–g2–g3); ` +
     `first peak (OD) = apex of the free-RNA peak (above ~3 OD the detector may be non-linear, then prefer the ribosomal AUC = g1 → endpoint for loading); ` +
     `polysome fraction = Apoly/(Apoly+A80); free-subunit fraction = (A40+A60)/ribosomal; molar 40S:60S = area ratio ÷ 0.35; ` +
-    `heavy fraction needs the heavy boundary and a resolved ladder; landmark positions are raw (unaligned) mm.</span></div>` +
+    `A2/A3 = disome and trisome regions between the consensus valleys (g4 → v23 → v34), same baseline as the polysomes; ` +
+    `heavy fraction = AUC[heavy…end] / AUC[mono+poly] with the heavy boundary auto-set at the 3|4 valley when the ladder resolves; landmark positions are raw (unaligned) mm.</span></div>` +
     `<div style="overflow-x:auto"><table style="margin-top:6px;font-size:12px"><thead><tr><th>Sample</th><th>First peak (OD)</th><th>A40</th><th>A60</th>` +
-    `<th>Poly fraction</th><th>Free-subunit fraction</th><th>Molar 40S:60S</th><th>Heavy fraction</th><th>40S / 60S / 80S (mm)</th>` +
+    `<th>Poly fraction</th><th>Free-subunit fraction</th><th>Molar 40S:60S</th><th>A2 (disome)</th><th>A3 (trisome)</th><th>Heavy fraction (≥4)</th><th>40S / 60S / 80S (mm)</th><th>2- / 3- / 4-mer (mm)</th>` +
     `<th>Polysome ladder</th><th>End slope (mOD/mm)</th></tr></thead><tbody>`;
   for (const r of rows)
     h += `<tr><td>${esc(r.name)}</td><td>${f2(r.p0y)}</td><td>${f3(r.a40)}</td><td>${f3(r.a60)}</td><td>${f3(r.pf)}</td><td>${f3(r.fs)}</td>` +
-         `<td>${f2(r.molar)}</td><td>${f3(r.hf)}</td><td>${f1(r.x40)} / ${f1(r.x60)} / ${f1(r.x80)}</td>` +
+         `<td>${f2(r.molar)}</td><td>${f3(r.a2)}</td><td>${f3(r.a3)}</td><td>${f3(r.hf)}</td><td>${f1(r.x40)} / ${f1(r.x60)} / ${f1(r.x80)}</td><td>${f1(r.n2)} / ${f1(r.n3)} / ${f1(r.n4)}</td>` +
          `<td style="text-align:left">${esc(r.ladder)}</td><td>${Number.isFinite(r.slope) ? (r.slope * 1000).toFixed(2) : "—"}</td></tr>`;
   el.innerHTML = h + `</tbody></table></div>`;
 }
@@ -1243,7 +1298,7 @@ function tidyCsv() {
   const rows = computeResults(), S = sensitivity(), hash = settingsHash(), rng = sensRanges(S);
   const M = [["total_auc", r => r.tot], ["ribosomal_auc", r => r.rib], ["first_peak_od", r => r.p0y], ["auc_monosome", r => r.aucM], ["auc_polysomes", r => r.aucP], ["poly_over_mono", r => r.pm],
     ["mono_over_poly", r => r.mp], ["log2_poly_over_mono", r => r.l2], ["polysome_fraction", r => r.pf], ["a40", r => r.a40], ["a60", r => r.a60],
-    ["free_subunit_fraction", r => r.fs], ["molar_40s_60s", r => r.molar], ["heavy_fraction", r => r.hf], ["x_shift_mm", r => r.off],
+    ["free_subunit_fraction", r => r.fs], ["molar_40s_60s", r => r.molar], ["a2_disome", r => r.a2], ["a3_trisome", r => r.a3], ["heavy_fraction", r => r.hf], ["x_shift_mm", r => r.off],
     ["end_slope_od_per_mm", r => r.slope], ["mono_over_poly_sd_noise", r => r.mpSd],
     ["mono_over_poly_sens_min", r => rng[r.key] ? rng[r.key][0] : NaN], ["mono_over_poly_sens_max", r => rng[r.key] ? rng[r.key][1] : NaN]];
   const head = "sample,block,group,loaded_a260,scan_time,excluded,exclude_reason,ladder,qc,metric,value,settings_hash,tool_version\n";
@@ -1265,6 +1320,7 @@ function renderLandmarkLine() {
   const g = landmarks, f = v => v == null ? "—" : v.toFixed(1);
   el.innerHTML = `<b>Landmarks (aligned, consensus of ${traces.filter(t => t.visible && !t.blank && t.lm && t.lm.x80 != null).length} samples):</b>${HELP_ICON("pipeline")} ` +
     `first-peak onset ${f(g.t0)} · 40S ${f(g.x40)} · 60S ${f(g.x60)} · 80S ${f(g.x80)} mm; valleys g1 ${f(g.g1)} · g2 ${f(g.g2)} · g3 ${f(g.g3)} · g4 ${f(g.g4)} mm; ` +
+    `polysomes 2× ${f(g.n2)} · 3× ${f(g.n3)} · 4× ${f(g.n4)}${g.n5 != null ? " · 5× " + f(g.n5) : ""} mm (valleys 2|3 ${f(g.v23)} · 3|4 ${f(g.v34)}${g.v45 != null ? " · 4|5 " + f(g.v45) : ""}); ` +
     `common endpoint ${f(g.end)} mm. Valley spread across samples: g1 ${f(g.g1_spread)} · g2 ${f(g.g2_spread)} · g3 ${f(g.g3_spread)} · g4 ${f(g.g4_spread)} mm — ` +
     (g.pureOffset ? `<span style="color:#2a7a2a">✓ every sample's g1–g3 valleys sit within ${LM_TOL} mm of the consensus: the x-shifts are a pure offset, the gradients are equivalent.</span>`
                   : `<span style="color:#a04000">⚠ at least one sample's g1–g3 valleys deviate by more than ${LM_TOL} mm from the consensus: that gradient differs in scale; a single shift cannot align it (see QC).</span>`) +
@@ -1336,13 +1392,13 @@ const HELP_ICON = tab => `<a class="hl" href="#help" data-help="${tab}" title="o
 document.getElementById("dl").addEventListener("click", () => {
   const rows = computeResults(), rngC = sensRanges(sensitivity());
   const head = "sample,total_auc,ribosomal_auc,first_peak_od,auc_monosome,auc_polysomes,mono_over_poly,mono_over_poly_sd_noise,mono_over_poly_sens_min,mono_over_poly_sens_max,poly_over_mono,log2_poly_over_mono," +
-               "polysome_fraction,a40,a60,free_subunit_fraction,molar_40s_60s,auc_heavy,heavy_fraction," +
+               "polysome_fraction,a40,a60,free_subunit_fraction,molar_40s_60s,a2_disome,a3_trisome,auc_heavy,heavy_fraction,n2_mm,n3_mm,n4_mm," +
                "x_shift_mm,x40_mm,x60_mm,x80_mm,polysome_peaks,ladder,end_slope_od_per_mm,qc," +
                "total_from_mm,mono_from_mm,mono_to_mm,poly_to_mm,heavy_from_mm,ref_80s_mm,baseline_mode,baseline_anchors_mm,despike,blank,block,group,loaded_a260,scan_time,settings_hash,tool_version\n";
   const mode = document.getElementById("bmode").value, blank = traces.find(t => t.blank);
   const n5 = v => Number.isFinite(v) ? v.toFixed(5) : "";
   const body = rows.map(r => [JSON.stringify(r.name), n5(r.tot), n5(r.rib), n5(r.p0y), n5(r.aucM), n5(r.aucP),
-    n5(r.mp), n5(r.mpSd), n5(rngC[r.key] ? rngC[r.key][0] : NaN), n5(rngC[r.key] ? rngC[r.key][1] : NaN), n5(r.pm), n5(r.l2), n5(r.pf), n5(r.a40), n5(r.a60), n5(r.fs), n5(r.molar), n5(r.aucH), n5(r.hf),
+    n5(r.mp), n5(r.mpSd), n5(rngC[r.key] ? rngC[r.key][0] : NaN), n5(rngC[r.key] ? rngC[r.key][1] : NaN), n5(r.pm), n5(r.l2), n5(r.pf), n5(r.a40), n5(r.a60), n5(r.fs), n5(r.molar), n5(r.a2), n5(r.a3), n5(r.aucH), n5(r.hf), r.n2 ?? "", r.n3 ?? "", r.n4 ?? "",
     (r.off || 0).toFixed(2), r.x40 ?? "", r.x60 ?? "", r.x80 ?? "", r.nPoly, JSON.stringify(r.ladder), n5(r.slope), JSON.stringify(r.qc.join("; ")),
     Number.isFinite(bounds.t0) ? bounds.t0 : "", bounds.m1, bounds.m2, bounds.p3, heavyOn() ? bounds.h : "", REF80, mode,
     JSON.stringify(mode === "anchors" ? parseAnchors().join(" ") : ""), despikeOn() ? "on" : "off",
@@ -1535,7 +1591,7 @@ function buildXlsx() {
 
   // Summary sheet
   const sHead = ["Sample","Total AUC","Ribosomal AUC","First peak (OD)","AUC monosome","AUC polysomes","Mono / Poly","Poly / Mono","log2 (Poly / Mono)",
-                 "Polysome fraction","A40","A60","Free-subunit fraction","Molar 40S:60S","AUC heavy","Heavy fraction",
+                 "Polysome fraction","A40","A60","Free-subunit fraction","Molar 40S:60S","A2 (disome)","A3 (trisome)","AUC heavy","Heavy fraction",
                  "x-shift (mm)","x-shift flag","40S (mm)","60S (mm)","80S (mm)","Polysome ladder","End slope (OD/mm)","Baseline","QC",
                  "Block","Group","Loaded A260","Scan time"];
   let sm = `<row r="1">` + sHead.map((h, c) => cellS(1, c + 1, h)).join("") + `</row>`;
@@ -1543,12 +1599,12 @@ function buildXlsx() {
   const cellV = (rn, c, v, d) => Number.isFinite(v) ? cellN(rn, c, v.toFixed(d)) : cellS(rn, c, "n/a");
   rows.forEach((r, i) => {
     const rn = i + 2;
-    const V = [r.tot, r.rib, r.p0y, r.aucM, r.aucP, r.mp, r.pm, r.l2, r.pf, r.a40, r.a60, r.fs, r.molar, r.aucH, r.hf, r.off || 0];
-    sm += `<row r="${rn}">` + cellS(rn, 1, r.name) + V.map((v, k) => cellV(rn, k + 2, v, k === 12 ? 3 : k === 15 ? 2 : 5)).join("") +
-      cellS(rn, 18, Math.abs(r.off) >= 2 ? "shift >= 2 mm (check valley agreement)" : "") +
-      cellV(rn, 19, r.x40, 1) + cellV(rn, 20, r.x60, 1) + cellV(rn, 21, r.x80, 1) + cellS(rn, 22, r.ladder) + cellV(rn, 23, r.slope, 5) +
-      cellS(rn, 24, r.bl) + cellS(rn, 25, r.qc.join("; ")) + cellS(rn, 26, r.meta.block || "") + cellS(rn, 27, r.meta.group || "") +
-      cellV(rn, 28, r.meta.a260, 3) + cellS(rn, 29, r.scan || "") + `</row>`;
+    const V = [r.tot, r.rib, r.p0y, r.aucM, r.aucP, r.mp, r.pm, r.l2, r.pf, r.a40, r.a60, r.fs, r.molar, r.a2, r.a3, r.aucH, r.hf, r.off || 0];
+    sm += `<row r="${rn}">` + cellS(rn, 1, r.name) + V.map((v, k) => cellV(rn, k + 2, v, k === 12 ? 3 : k === 17 ? 2 : 5)).join("") +
+      cellS(rn, 20, Math.abs(r.off) >= 2 ? "shift >= 2 mm (check valley agreement)" : "") +
+      cellV(rn, 21, r.x40, 1) + cellV(rn, 22, r.x60, 1) + cellV(rn, 23, r.x80, 1) + cellS(rn, 24, r.ladder) + cellV(rn, 25, r.slope, 5) +
+      cellS(rn, 26, r.bl) + cellS(rn, 27, r.qc.join("; ")) + cellS(rn, 28, r.meta.block || "") + cellS(rn, 29, r.meta.group || "") +
+      cellV(rn, 30, r.meta.a260, 3) + cellS(rn, 31, r.scan || "") + `</row>`;
   });
   const setRow0 = rows.length + 3;
   const fitY = document.getElementById("cropy").checked;
@@ -1559,6 +1615,7 @@ function buildXlsx() {
     ["Alignment reference: 80S at (mm)", REF80], ["Gradient profile", `${profileName}: search from ${PROF.lmStart}, 80S window ${PROF.w80lo}–${PROF.w80hi}, subunit step ${PROF.stepLo}–${PROF.stepHi}, g4 offset ${PROF.g4lo}–${PROF.g4hi} mm`],
     ["Blank gradient subtracted", blankT ? blankT.name : "none"],
     ["Landmarks, aligned mm (40S/60S/80S; g1..g4; end)", landmarks ? `${Lm.x40 ?? "-"} / ${Lm.x60 ?? "-"} / ${Lm.x80}; ${Lm.g1 ?? "-"} ${Lm.g2 ?? "-"} ${Lm.g3 ?? "-"} ${Lm.g4 ?? "-"}; ${Lm.end}` : "none"],
+    ["Polysome ladder, aligned mm (2x/3x/4x/5x; valleys 2|3, 3|4, 4|5)", landmarks ? `${Lm.n2 ?? "-"} / ${Lm.n3 ?? "-"} / ${Lm.n4 ?? "-"} / ${Lm.n5 ?? "-"}; ${Lm.v23 ?? "-"} ${Lm.v34 ?? "-"} ${Lm.v45 ?? "-"}` : "none"],
     ["Baseline mode", mode], ["Baseline anchors (mm)", mode === "anchors" ? parseAnchors().join(", ") : "—"],
     ["Peak alignment", document.getElementById("alignx").checked ? "on" : "off"],
     ["Spike removal (Hampel)", despikeOn() ? "on" : "off"],
@@ -1592,7 +1649,7 @@ function buildXlsx() {
   // Summary tab: combined chart of every exported trace (aligned positions,
   // same colors as the viewer), anchored below the settings block
   if (sheets.length) {
-    const top = rows.length + 21;                       // 0-based row below the settings
+    const top = rows.length + 22;                       // 0-based row below the settings
     files.push({ name: "xl/worksheets/sheet1.xml",
                  text: sheetXml({ rows: sm, drawing: `<drawing r:id="rId1"/>` }) });
     files.push({ name: "xl/worksheets/_rels/sheet1.xml.rels", text: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -1748,7 +1805,7 @@ applyProfile(PROF, profileName);
 document.getElementById("pf_preset").addEventListener("change", e => {
   if (PROFILES[e.target.value]) { applyProfile(PROFILES[e.target.value], e.target.value); render(); } else profileName = "custom";
 });
-for (const k of ["ref80", "lmStart", "w80lo", "w80hi", "stepLo", "stepHi", "g4lo", "g4hi"])
+for (const k of ["ref80", "lmStart", "w80lo", "w80hi", "stepLo", "stepHi", "g4lo", "g4hi", "d2lo", "d2hi", "spLo", "spHi"])
   document.getElementById("pf_" + k).addEventListener("change", e => {
     const v = parseFloat(e.target.value); if (!Number.isFinite(v)) return;
     applyProfile({ ...PROF, [k]: v }, "custom"); render();
