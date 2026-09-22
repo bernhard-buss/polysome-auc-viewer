@@ -161,7 +161,7 @@
         <span><input type="number" id="m1" step="0.1"> <span class="dim">to</span> <input type="number" id="m2" step="0.1"></span>
         <span class="lbl poly" title="Polysomes start at the monosome end and run to the common endpoint">Polysomes to</span>
         <span><input type="number" id="p3" step="0.1"></span>
-        <span class="lbl heavy" title="Optional: valley between the 3-mer and 4-mer peaks; needs a resolved ladder">Heavy (≥4-mer) from</span>
+        <span class="lbl heavy" title="Start of the tail region (heavy polysomes): auto = the last usable valley of the ladder; set by hand to move it">Tail (heavy) from</span>
         <span><input type="number" id="h" step="0.1" placeholder="off"><a class="hl" href="#help" data-help="metrics" title="Help: metrics">ⓘ</a></span>
       </div>
       <div class="fact">
@@ -220,15 +220,18 @@
       <span class="sep"></span><button id="lockbtn">Lock settings</button><span id="lockinfo" class="note"></span></div>
   </div>
   <table id="results"><thead>
-    <tr><th data-s="name">Sample</th><th data-s="tot">Total AUC</th><th data-s="rib">Ribosomal AUC</th><th data-s="aucM">AUC monosome</th><th data-s="aucP">AUC polysomes</th><th data-s="mp">Mono / Poly</th><th data-s="pm">Poly / Mono</th><th data-s="l2">log2 (Poly / Mono)</th><th data-s="off">x-shift (mm)</th><th data-s="blv">Baseline</th><th data-s="qcn" data-help="qc">QC</th></tr>
+    <tr><th data-s="name">Sample</th><th data-s="tot">Total AUC</th><th data-s="rib">Ribosomal AUC</th><th data-s="aucM">AUC monosome</th><th data-s="aucP">AUC polysomes</th><th data-s="mp">Mono / Poly</th><th data-s="pm">Poly / Mono</th><th data-s="l2">log2 (Poly / Mono)</th><th data-s="hl" data-help="metrics">Heavy / light</th><th data-s="off">x-shift (mm)</th><th data-s="blv">Baseline</th><th data-s="qcn" data-help="qc">QC</th></tr>
   </thead><tbody></tbody></table>
+  <div id="sizedist"></div>
   <div id="ext"></div>
   <div id="sens" class="note"></div>
 </div>
 
 <div class="panel needsdata">
   <div class="ptitle"><span class="pnum">4</span><h2>Design &amp; statistics</h2><a class="hl" href="#help" data-help="stats" title="Help: sensitivity &amp; contrasts">ⓘ</a>
-    <div class="tbar"><label class="dim">contrasts <input type="text" id="contrasts_in" size="40" placeholder="e.g. KO_CON vs PT_CON; KO_MG vs PT_MG"></label></div>
+    <div class="tbar"><label class="dim">contrasts <input type="text" id="contrasts_in" size="40" placeholder="e.g. KO_CON vs PT_CON; KO_MG vs PT_MG"></label>
+      <label class="dim" title="How each region's area is normalised before samples are compared">per region <select id="regnorm">
+        <option value="share" selected>share of mono + poly</option><option value="rib">per ribosomal AUC</option><option value="a260">per loaded A260</option><option value="raw">raw area (loading-matched only)</option></select></label></div>
   </div>
   <div id="design" class="note"></div>
   <div id="contrasts"></div>
@@ -277,7 +280,7 @@
       <tr><td>g2</td><td>40S | 60S</td><td>A40 / A60 split</td></tr>
       <tr><td>g3</td><td>60S | 80S</td><td>monosome start</td></tr>
       <tr><td>g4</td><td>80S | polysomes (minimum in 80S + 6…12 mm)</td><td>monosome end / polysome start = disome region start</td></tr>
-      <tr><td>2|3, 3|4, 4|5</td><td>valleys between the assigned n-mers (detrended minima)</td><td>disome / trisome regions; heavy (≥4-mer) starts at 3|4</td></tr>
+      <tr><td>2|3, 3|4, 4|5</td><td>valleys between the assigned n-mers (detrended minima)</td><td>cuts of the polysome partition (2-, 3-, 4-mer regions and the tail); a valley counts as a cut when its median relative depth is ≥ 10 %, otherwise the cut is the midpoint between the two apexes</td></tr>
       <tr><td>end</td><td>—</td><td>polysome end: common endpoint of all loaded samples</td></tr></table>
     <p><b>Total AUC</b> starts at the onset of the very first data peak, so it includes the free-RNA peak and excludes only the start artefacts before it.</p>
     <h3>Gradient profile (advanced)</h3>
@@ -287,7 +290,9 @@
     <h3>Pure-offset test</h3>
     <p>If every sample's g1–g3 valleys sit within 1.5 mm of the consensus after alignment, the x-shifts are a pure meniscus-detection offset and the gradients are physically equivalent. A larger deviation means that gradient differs in scale; a single shift cannot align it, and the sample is flagged.</p>
     <h3>Polysome ladder (2-, 3-, 4-, 5-mer)</h3>
-    <p>Polysome peaks are small (a few mOD on a rising hump), so they are searched with a relaxed threshold — peaks with prominence ≥ max(0.0008 OD, 1.5σ) plus curvature shoulders (minima of the second derivative of a 3 mm smooth) — inside physics-based windows: the disome 1.6–2.7 subunit steps after the 80S (ΔS from 80S to ~120S is twice the 60S→80S ΔS), each next n-mer at 0.4–0.9 of the previous spacing (spacings shrink with n). In each window the most prominent real peak wins; a shoulder counts only when no peak exists (dotted tick, letter “s” in the verdict). Valleys between assigned n-mers are minima of the segment after removing the line joining the two apexes, so they exist even on a rising hump. The consensus positions (medians over samples) label the chart as 2×, 3×, 4×, and the <b>heavy boundary is auto-set at the 3|4 valley</b> when 2-, 3- and 4-mer are assigned; A2/A3 in the extended table are the disome and trisome regions.</p>
+    <p>Polysome peaks are small (a few mOD on a rising hump), so they are searched with a relaxed threshold — peaks with prominence ≥ max(0.0008 OD, 1.5σ) plus curvature shoulders (minima of the second derivative of a 3 mm smooth) — inside physics-based windows: the disome 1.6–2.7 subunit steps after the 80S (ΔS from 80S to ~120S is twice the 60S→80S ΔS), each next n-mer at 0.4–0.9 of the previous spacing (spacings shrink with n). In each window the most prominent real peak wins; a shoulder counts only when no peak exists (dotted tick, letter “s” in the verdict). Valleys between assigned n-mers are minima of the segment after removing the line joining the two apexes, so they exist even on a rising hump. The consensus positions (medians over samples) label the chart as 2×, 3×, 4×.</p>
+    <h4>The polysome partition</h4>
+    <p>The polysome window is cut into <b>one partition</b> of n-mer regions: g4 → 2|3 → 3|4 → 4|5 → endpoint, i.e. the 2-mer, 3-mer, 4-mer regions and a <b>tail “≥ n”</b> that runs from the last usable cut to the endpoint and is labelled by what it contains (≥4 when the 4|5 valley is missing, ≥5 when the 5-mer resolved, ≥2 when nothing resolved). A valley is a usable cut only when it is a real minimum: its <b>relative depth</b> — the drop of the trace below the line joining the two apexes, over the lower apex's height above the flat minimum of the polysome stretch — must be ≥ 10 % (median over samples); a shoulder has no minimum of its own, so the cut then falls to the midpoint between the apexes (dotted line on the chart, “≈ midpoint” in the size-distribution panel). Every region uses the <em>same</em> baseline as Poly / Mono, so the regions add up to the polysome area exactly — no chord is placed under individual peaks (on a rising hump that would subtract the polysomes themselves). The <b>tail (heavy) boundary</b> is auto-set at the last usable cut and can be moved by hand; cuts beyond it are dropped.</p>
     <p>Verdict: <em>resolved</em> = 2-, 3- and 4-mer assigned; <em>partial</em> = disome only; <em>unresolved</em> = no candidate in the disome window. The halfmer (80S + 40S, ~100S) often appears as a shoulder ~7–10 mm after the 80S and is deliberately not assigned; it stays inside the monosome window that ends at g4.</p>
   </section>
 
@@ -311,7 +316,17 @@
       <tr><td>AUC monosome / polysomes</td><td>areas of the two regions after baseline subtraction</td></tr>
       <tr><td>Mono / Poly, Poly / Mono</td><td>the ratios; unitless, loading cancels once the baseline is right. Under Mono / Poly: <b>± noise</b> — the 1σ from random noise plus a one-sigma baseline offset (statistical only) — and the <b>min–max</b> over the sensitivity grid under the current baseline (the setting-dependence). Both are in the exports.</td></tr>
       <tr><td>log2 (Poly / Mono)</td><td>the scale on which to compare and average ratios</td></tr>
+      <tr><td>Heavy / light</td><td>(≥4-mer regions) / (2-mer + 3-mer regions) of the polysome partition — the classic initiation-vs-elongation shift readout; needs the 2|3 and 3|4 cuts</td></tr>
       <tr><td>x-shift</td><td>movement applied to the sample's 80S (mm); ⚠ at ≥ 2 mm only as a reminder to check the pure-offset test. In shift + scale mode the fitted factor b is shown underneath (× 0.97 …)</td></tr></table>
+    <h3>Polysome size distribution</h3>
+    <table><tr><th>column</th><th>definition</th></tr>
+      <tr><td>A1, A2, A3, A4, A≥n (tail)</td><td>areas of the monosome and of each polysome region of the partition (polysome baseline); the polysome regions add up to AUC polysomes</td></tr>
+      <tr><td>f2, f3, f4, f tail</td><td>A<sub>n</sub> / AUC polysomes — the size distribution; sums to 1 (compositional: one share cannot rise without another falling)</td></tr>
+      <tr><td>n× / 1×</td><td>A<sub>n</sub> / A1 — each class against the monosome</td></tr>
+      <tr><td>Heavy / light</td><td>(≥4-mer) / (2-mer + 3-mer)</td></tr>
+      <tr><td>Ribosomes / polysomal mRNA</td><td>Σ A<sub>n</sub> / Σ (A<sub>n</sub> / n) over the polysome regions: A260 counts ribosomes, so A<sub>n</sub>/n counts messages. The tail's n is unknown and is counted at its lower bound, so the value is a <b>lower bound</b> (“≥”)</td></tr>
+      <tr><td>u1 … u tail</td><td>boundary uncertainty: moving an edge by δ moves ≈ OD(edge above baseline) × δ into the neighbour region; u = the sum over the region's two edges at δ = 0.5 mm, as a fraction of the area. A cut that sits high on the hump is a weak cut — cells with u &gt; 25 % are greyed</td></tr>
+      <tr><td>bars</td><td>shares per sample (blocks kept together); or, with a reference group selected, each sample's log2 fold of its share against the mean share of that group in the same block</td></tr></table>
     <h3>Extended table</h3>
     <table><tr><th>column</th><th>definition</th></tr>
       <tr><td>First peak (OD)</td><td>apex of the free-RNA peak</td></tr>
@@ -320,7 +335,7 @@
       <tr><td>Free-subunit fraction</td><td>(A40 + A60) / ribosomal AUC</td></tr>
       <tr><td>Molar 40S:60S</td><td>A40/A60 ÷ 0.35 — A260 scales with rRNA mass (18S ≈ 1.9 kb vs 28S+5.8S+5S ≈ 5.3 kb), so equimolar subunits give an area ratio of ≈ 0.35</td></tr>
       <tr><td>A2 (disome), A3 (trisome)</td><td>areas of the polysome region between g4 → 2|3 valley and 2|3 → 3|4 valley (polysome baseline)</td></tr>
-      <tr><td>Heavy fraction (≥4)</td><td>AUC[heavy…end] / AUC[mono+poly]; the heavy boundary is auto-set at the 3|4 valley when the ladder resolves, otherwise off</td></tr>
+      <tr><td>Heavy fraction (tail)</td><td>AUC[tail…end] / AUC[mono+poly]; the tail starts at the last usable ladder cut (or where you set it)</td></tr>
       <tr><td>2- / 3- / 4-mer</td><td>assigned polysome peak positions, raw mm</td></tr>
       <tr><td>40S / 60S / 80S</td><td>detected peak positions, raw (unaligned) mm</td></tr>
       <tr><td>Polysome ladder</td><td>the verdict and its reason</td></tr>
@@ -355,10 +370,14 @@
       <li>Contrasts (<code>A vs B; C vs D</code>) are per-block differences of log2(Poly / Mono) between group means. With fewer than three blocks the summary is descriptive; from three blocks a paired t over blocks is shown. Never pool raw areas across blocks — they scale with loading and discard the blocking.</li>
       <li>With the replicate scatter typical of these gradients, three rotors with one tube per condition detect only several-fold effects; plan duplicates per rotor or more rotors, and recompute after the first two.</li>
     </ul>
+    <h3>Ratios per region</h3>
+    <p>For each region of the polysome partition (1× = monosome, 2×, 3×, …, tail) and each contrast, the <b>per-block log2(A / B)</b> of the region's normalised area is computed exactly like the Poly / Mono contrast — group means within a block, paired over blocks, a paired t from three blocks. The result is a <b>fold-change profile</b>: mono +1.4×, di 0.9×, tri 0.7×, tail 0.5× reads as the shift from polysomes into monosomes, resolved by class.</p>
+    <p><b>Normalisation</b> (the <em>per region</em> selector; part of the settings hash): a raw area ratio across samples is a ratio of loading unless the areas are normalised first. <em>Share of mono + poly</em> (default) is loading-free by construction but compositional — one share cannot rise without another falling, so the five ratios are one shift read five ways. <em>Per ribosomal AUC</em> keeps the free subunits in the denominator; <em>per loaded A260</em> trusts the loading you recorded; <em>raw</em> is only meaningful when the loading QC is green and is warned against otherwise.</p>
+    <p><b>Range</b>: a consensus valley cuts every sample at the same position, so a boundary error partly cancels in the ratio — but only if the profiles have the same shape at that valley. Rather than assuming that, every region ratio is recomputed with each cut moved ± 0.5 mm; the grey band in the profile chart and the “cut-shift range” column show the min–max. A mean whose range straddles 0 is greyed: not distinguishable from 1 at this resolution. The tail ratio inherits the <b>rising end</b> flag (both samples truncated → a ratio of lower bounds).</p>
     <h3>Scale test</h3>
     <p>For every pair, one scalar <em>c</em> is fitted so that A ≈ c·B over the integration window (baseline-subtracted, aligned). Residual ≤ 10 % of A's RMS: the two differ by loading only; &gt; 25 %: a real shape difference — a diagnostic that sends you to the lab notebook, not an exclusion criterion.</p>
     <h3>Lock settings</h3>
-    <p>Freezes every analysis control and stamps a settings hash (boundaries, baseline, alignment, despiking, blank, contrasts, exclusions, QC thresholds) on the CSV, tidy CSV and Excel exports.</p>
+    <p>Freezes every analysis control and stamps a settings hash (boundaries, baseline, alignment, despiking, blank, contrasts, region normalisation, exclusions, QC thresholds) on the CSV, tidy CSV and Excel exports.</p>
   </section>
 
   <section data-tab="changelog" hidden><div id="changelog"><p class="dim">Loading CHANGELOG.md…</p></div></section>
@@ -379,7 +398,7 @@
     <table><tr><th>export</th><th>contents</th></tr>
       <tr><td>Results CSV</td><td>one row per sample: all columns of both tables, QC, boundaries, baseline, alignment reference, blank, metadata, settings hash</td></tr>
       <tr><td>Tidy CSV</td><td>long format (sample × metric, with block/group/scan time/exclusion and the sensitivity range) — the input for statistics in R</td></tr>
-      <tr><td>Excel</td><td><b>Summary</b> (all results, settings, combined chart in the viewer's colours), one tab per sample with its data and a native chart (positions as displayed, i.e. aligned; y-axes capped when the y-fit is on), <b>Sensitivity</b> and <b>Contrasts</b> sheets</td></tr></table>
+      <tr><td>Excel</td><td><b>Summary</b> (all results, settings, combined chart in the viewer's colours), one tab per sample with its data and a native chart (positions as displayed, i.e. aligned; y-axes capped when the y-fit is on), <b>Regions</b> (the partition per sample with a stacked bar chart of the shares), <b>Sensitivity</b> and <b>Contrasts</b> sheets (the latter with the per-region contrasts)</td></tr></table>
   </section>
 </div>
 
@@ -393,7 +412,7 @@ const COLORS = ["#e41a1c","#377eb8","#4daf4a","#984ea3","#ff7f00","#a65628",
                 "#008080","#b30059","#807dba","#e6ab02","#1b9e77","#66a61e"];
 // Bump for every change that affects computed numbers (landmarks, baselines, boundaries,
 // integration, QC thresholds); documentation/layout-only changes do not bump it. See CHANGELOG.md.
-const VERSION = "1.2";
+const VERSION = "1.3";
 document.getElementById("ver").textContent = "v" + VERSION; document.getElementById("ver2").textContent = "v" + VERSION;
 let traces = [];           // {name, x[], y[], yc[], spikes[], visible, color, file, off}
 let bounds = { t0: null, m1: null, m2: null, p3: null, h: null };
@@ -564,6 +583,17 @@ function detectLandmarks(t) {
   if (lad.n2 && lad.n3) lad.v23 = detrMin(lad.n2.x, lad.n3.x);
   if (lad.n3 && lad.n4) lad.v34 = detrMin(lad.n3.x, lad.n4.x);
   if (lad.n4 && lad.n5) lad.v45 = detrMin(lad.n4.x, lad.n5.x);
+  // relative depth of each ladder valley: the drop of the trace below the line joining
+  // the two apexes, over the lower apex's height above the flat minimum of the polysome
+  // stretch — a resolution index in [0, 1]: 0 = a shoulder on a hump, 1 = the trace
+  // returns to baseline between the peaks. Decides whether a valley is a usable region cut.
+  { let blm = Infinity; const from = L.g3 != null ? L.g3 : L.x80 - 8;
+    for (let i = 0; i < n; i++) if (x[i] >= from && x[i] <= x[n - 1] - 1 && s[i] < blm) blm = s[i];
+    const depth = (a, b, v) => { if (!a || !b || v == null) return NaN;
+      const ya = interpRawS(s, x, a.x), yb = interpRawS(s, x, b.x), yv = interpRawS(s, x, v);
+      const chord = ya + (v - a.x) / (b.x - a.x) * (yb - ya), h = Math.min(ya, yb) - blm;
+      return h > 1e-9 ? Math.max(0, Math.min(1, (chord - yv) / h)) : NaN; };
+    lad.d23 = depth(lad.n2, lad.n3, lad.v23); lad.d34 = depth(lad.n3, lad.n4, lad.v34); lad.d45 = depth(lad.n4, lad.n5, lad.v45); }
   L.lad = lad;
   const off = k => lad[k] ? `+${(lad[k].x - L.x80).toFixed(1)}` : null, ty = k => lad[k] ? lad[k].type[0] : "";
   const found = ["n2", "n3", "n4", "n5"].filter(k => lad[k]);
@@ -673,6 +703,8 @@ function consensusLandmarks() {
     g[k] = a.length >= Math.max(1, Math.ceil(vis.length / 2)) ? +median(a).toFixed(1) : null; g[k + "_n"] = a.length; }
   for (const k of ["v23", "v34", "v45"]) { const a = vis.map(t => t.lm.lad && t.lm.lad[k] != null ? +(ax_(t, t.lm.lad[k])).toFixed(2) : NaN).filter(Number.isFinite);
     g[k] = a.length >= Math.max(1, Math.ceil(vis.length / 2)) ? +median(a).toFixed(1) : null; g[k + "_spread"] = a.length ? +(Math.max(...a) - Math.min(...a)).toFixed(1) : NaN; }
+  for (const k of ["d23", "d34", "d45"]) { const a = vis.map(t => t.lm.lad && Number.isFinite(t.lm.lad[k]) ? t.lm.lad[k] : NaN).filter(Number.isFinite);
+    g[k] = a.length ? +median(a).toFixed(3) : NaN; }
   g.end = +(Math.min(...vis.map(t => px_(t, t.x.length - 1))) - 0.5).toFixed(1);
   const t0s = vis.map(t => t.lm.t0 != null ? +(ax_(t, t.lm.t0)).toFixed(2) : NaN).filter(Number.isFinite);
   g.t0 = t0s.length ? +median(t0s).toFixed(1) : null;
@@ -683,10 +715,48 @@ function consensusLandmarks() {
   landmarks = g;
 }
 
+// ---- polysome regions: ONE partition of the polysome window ------------------------
+// Cuts between the assigned n-mers, at the consensus valley when that valley is deep
+// enough to be a real minimum (median relative depth >= CUT_DEPTH), otherwise at the
+// midpoint between the two apexes (a shoulder has no minimum of its own). The regions
+// [m2,c1], [c1,c2], ..., [c_last,p3] use the SAME baseline as Poly/Mono, so they add up
+// to Apoly exactly; the last region is the tail "≥ n" and starts at the heavy boundary h
+// (auto = the last cut, manual = wherever it is set; consensus cuts beyond h are dropped).
+const CUT_DEPTH = 0.10;   // relative valley depth below which the cut falls back to the apex midpoint
+const CUT_SHIFT = 0.5;    // mm: the boundary perturbation behind the region uncertainty and the ratio range
+function regionCuts() {
+  if (!landmarks) return [];
+  const out = [];
+  for (const [va, na, nb, lab, dk] of [["v23", "n2", "n3", "2|3", "d23"], ["v34", "n3", "n4", "3|4", "d34"], ["v45", "n4", "n5", "4|5", "d45"]]) {
+    const a = landmarks[na], b = landmarks[nb]; if (a == null || b == null) break;
+    const d = landmarks[dk], deep = Number.isFinite(d) && d >= CUT_DEPTH && landmarks[va] != null;
+    out.push({ x: deep ? landmarks[va] : +((a + b) / 2).toFixed(1), lab, depth: d, rule: deep ? "valley" : "midpoint" });
+  }
+  return out;
+}
+function regionSet(cuts) {
+  if (bounds.m2 == null || bounds.p3 == null) return [];
+  let C;
+  if (cuts) C = cuts.slice().sort((p, q) => p.x - q.x);          // an explicit (perturbed) cut list, used as given
+  else {
+    C = regionCuts().filter(c => c.x > bounds.m2 + 0.5 && c.x < bounds.p3 - 0.5).sort((p, q) => p.x - q.x);
+    if (heavyOn()) {
+      C = C.filter(c => c.x <= bounds.h + 0.25);
+      if (!C.length || Math.abs(C[C.length - 1].x - bounds.h) > 0.25) C.push({ x: bounds.h, lab: "heavy", depth: NaN, rule: "manual" });
+    }
+  }
+  const edges = [bounds.m2, ...C.map(c => c.x), bounds.p3], out = [];
+  for (let i = 0; i + 1 < edges.length; i++) {
+    const tail = i + 2 === edges.length;
+    out.push({ n: i + 2, tail, label: tail ? `≥${i + 2}` : `${i + 2}`, a: edges[i], b: edges[i + 1], cut: i ? C[i - 1] : null });
+  }
+  return out;
+}
 function autoBounds() {
   if (!landmarks || landmarks.g3 == null || landmarks.g4 == null) return false;
   bounds.t0 = landmarks.t0 != null ? landmarks.t0 : landmarks.g1; bounds.m1 = landmarks.g3; bounds.m2 = landmarks.g4; bounds.p3 = landmarks.end;
-  bounds.h = (landmarks.v34 != null && landmarks.v34 > bounds.m2 + 0.5 && landmarks.v34 < bounds.p3 - 0.5) ? landmarks.v34 : null;
+  const cuts = regionCuts().filter(c => c.x > bounds.m2 + 0.5 && c.x < bounds.p3 - 0.5);
+  bounds.h = cuts.length ? cuts[cuts.length - 1].x : null;   // the tail starts at the last usable cut
   autoMode = true; syncInputs(); return true;
 }
 function syncInputs() {
@@ -867,11 +937,24 @@ function computeResults(opts) {
     const t0 = (Number.isFinite(bounds.t0) && bounds.t0 < bounds.m1) ? bounds.t0 : bounds.m1;
     const tot = aucRegion(t, t0, bounds.p3, bl);
     const ah = heavyOn() ? aucRegion(t, bounds.h, bounds.p3, bl) : NaN;
-    // n-mer regions from the consensus valleys: disome g4..v23, trisome v23..v34
-    const v23 = landmarks && landmarks.v23 != null && landmarks.v23 > bounds.m2 && landmarks.v23 < bounds.p3 ? landmarks.v23 : null;
-    const v34 = landmarks && landmarks.v34 != null && v23 != null && landmarks.v34 > v23 && landmarks.v34 < bounds.p3 ? landmarks.v34 : null;
-    const a2 = v23 != null ? aucRegion(t, bounds.m2, v23, bl) : NaN;
-    const a3 = v34 != null ? aucRegion(t, v23, v34, bl) : NaN;
+    // polysome partition (regionSet): every region on the polysome baseline, so the
+    // regions sum to Apoly. Boundary uncertainty per region = OD above baseline at each
+    // of its two edges × CUT_SHIFT, as a fraction of the area: moving an edge by δ moves
+    // ≈ OD(edge)·δ into the neighbour, so a cut that sits high on the hump is a weak one.
+    const odb = xx => Math.max(0, interp(t, xx) - bl(xx));
+    const regs = [{ n: 1, tail: false, label: "1", a: bounds.m1, b: bounds.m2, area: am, cut: null }]
+      .concat(regionSet(opts && opts.cuts).map(g => ({ ...g, area: aucRegion(t, g.a, g.b, bl) })));
+    for (const g of regs) g.u = g.area > 0 ? (odb(g.a) + odb(g.b)) * CUT_SHIFT / g.area : NaN;
+    const poly = regs.filter(g => g.n >= 2), byN = n => regs.find(g => g.n === n && !g.tail);
+    const a2 = byN(2) ? byN(2).area : NaN, a3 = byN(3) ? byN(3).area : NaN;
+    for (const g of poly) { g.f = ap > 0 ? g.area / ap : NaN; g.r1 = am > 0 ? g.area / am : NaN; }
+    // heavy / light = (≥4-mer) / (2-mer + 3-mer): needs 2 and 3 as separate regions and something at ≥4
+    const light = byN(2) && byN(3) ? a2 + a3 : NaN, heavy = poly.filter(g => g.n >= 4).reduce((z, g) => z + g.area, 0);
+    const hl = Number.isFinite(light) && light > 0 && poly.some(g => g.n >= 4) ? heavy / light : NaN;
+    // ribosomes per polysomal mRNA: absorbance counts ribosomes, so A_n / n counts mRNAs;
+    // the tail is counted at its lower bound n, which makes the mean a lower bound ("≥")
+    const rpmNum = poly.reduce((z, g) => z + g.area, 0), rpmDen = poly.reduce((z, g) => z + g.area / g.n, 0);
+    const rpm = rpmDen > 0 && poly.length > 1 ? rpmNum / rpmDen : NaN;
     // sub-polysomal peaks (40S, 60S): valley-to-valley baseline through g1-g2-g3 (resolved peaks
     // on the sloping tail of the void spike) — only when the landmarks exist and are ordered
     let a40 = NaN, a60 = NaN;
@@ -919,7 +1002,7 @@ function computeResults(opts) {
              pf: (am + ap) > 0 ? ap / (am + ap) : NaN,
              fs: (rib > 0 && Number.isFinite(a40) && Number.isFinite(a60)) ? (a40 + a60) / rib : NaN,
              molar: (a60 > 0 && Number.isFinite(a40)) ? a40 / a60 / 0.35 : NaN,
-             hf: heavyOn() && (am + ap) > 0 ? ah / (am + ap) : NaN, a2, a3,
+             hf: heavyOn() && (am + ap) > 0 ? ah / (am + ap) : NaN, a2, a3, regs, hl, rpm, tailN: poly.length ? poly[poly.length - 1].n : NaN,
              n2: lm.lad && lm.lad.n2 ? lm.lad.n2.x : null, n3: lm.lad && lm.lad.n3 ? lm.lad.n3.x : null, n4: lm.lad && lm.lad.n4 ? lm.lad.n4.x : null,
              off: lm.x80 != null ? +(ax_(t, lm.x80) - lm.x80).toFixed(2) : -(t.off || 0), scale: t.scale || 1,
              x80: lm.x80, x60: lm.x60, x40: lm.x40, nPoly: (lm.poly || []).length,
@@ -986,9 +1069,14 @@ function render() {
     `<text x="${ML-8}" y="${sy(v)+4}" font-size="11" text-anchor="end" fill="#555">${+v.toFixed(3)}</text>`;
   s += `<text x="${(ML+W-MR)/2}" y="${H-6}" font-size="12" text-anchor="middle" fill="#333">Position (mm)</text>`;
   s += `<text transform="translate(14 ${(MT+H-MB)/2}) rotate(-90)" font-size="12" text-anchor="middle" fill="#333">OD 260 nm</text>`;
-  // heavy-polysome sub-region shading
-  if (heavyOn())
-    s += `<rect x="${sx(bounds.h)}" y="${MT}" width="${Math.max(0, sx(bounds.p3)-sx(bounds.h))}" height="${H-MT-MB}" fill="#984ea3" opacity="0.08"/>`;
+  // polysome partition: alternating tints per n-mer region, the tail in the heavy colour;
+  // a cut that fell back to the apex midpoint (shallow valley) is drawn dotted
+  const RS = regionSet();
+  RS.forEach((g, i) => {
+    s += `<rect x="${sx(g.a)}" y="${MT}" width="${Math.max(0, sx(g.b)-sx(g.a))}" height="${H-MT-MB}" fill="${g.tail ? "#984ea3" : (i % 2 ? "#e6550d" : "#fff")}" opacity="${g.tail ? 0.08 : i % 2 ? 0.05 : 0}"/>`;
+    if (g.cut && g.cut.lab !== "heavy")
+      s += `<line x1="${sx(g.a)}" y1="${MT}" x2="${sx(g.a)}" y2="${H-MB}" stroke="#a77" stroke-width="1" stroke-dasharray="${g.cut.rule === "midpoint" ? "2 3" : "6 3"}" opacity="0.6"/>`;
+  });
   // traces (+ the baseline actually subtracted, dotted, per trace)
   const mode = document.getElementById("bmode").value;
   s += `<g clip-path="url(#plotclip)">`;
@@ -1039,6 +1127,9 @@ function render() {
     for (const [k, lab] of [["g1", "g1"], ["g2", "g2"], ["g3", "g3"], ["g4", "g4"], ["v23", "2|3"], ["v34", "3|4"], ["v45", "4|5"]]) if (landmarks[k] != null)
       s += `<text x="${sx(landmarks[k])}" y="${H-MB-4}" font-size="9.5" text-anchor="middle" fill="#888">${lab}</text>`;
   }
+  // region labels (1× … ≥n×) centred in each region, above the valley labels
+  if (bounds.m1 != null) for (const g of [{ a: bounds.m1, b: bounds.m2, label: "1" }].concat(RS))
+    if (sx(g.b) - sx(g.a) > 22) s += `<text x="${(sx(g.a)+sx(g.b))/2}" y="${H-MB-16}" font-size="10" text-anchor="middle" fill="#667">${g.label}×</text>`;
   const BL = [["m1", "#377eb8", "mono ▸"], ["m2", "#555", "◂ mono | poly ▸"], ["p3", "#e6550d", "◂ poly"]];
   if (heavyOn()) BL.splice(2, 0, ["h", "#984ea3", "heavy ▸"]);
   if (Number.isFinite(bounds.t0)) BL.unshift(["t0", "#999", "total ▸"]);
@@ -1160,11 +1251,13 @@ function renderTable() {
     `<td>${f3(r.tot)}</td><td>${f3(r.rib)}</td><td>${f3(r.aucM)}</td><td>${f3(r.aucP)}</td>` +
     `<td class="ratio" title="± noise-propagated 1σ (random noise + a one-sigma baseline offset); range = min–max over the sensitivity grid under the current baseline">${f3(r.mp)}` +
       `<span class="sub2">${Number.isFinite(r.mpSd) ? "± " + r.mpSd.toFixed(3) : ""}${rng[r.key] ? " · " + f3(rng[r.key][0]) + "–" + f3(rng[r.key][1]) : ""}</span></td><td>${f3(r.pm)}</td><td>${f3(r.l2)}</td>` +
+    `<td title="(≥4-mer) / (2-mer + 3-mer) — needs the 2|3 and 3|4 cuts">${f3(r.hl)}</td>` +
     `<td>${r.off ? r.off.toFixed(2) : "0"}${r.scale !== 1 ? `<span class="sub2" style="display:block;font-size:10.5px;color:#778;font-weight:400">× ${r.scale.toFixed(3)}</span>` : ""}${Math.abs(r.off) >= 2 ? ' <span title="x-shift ≥ 2 mm — harmless if the valleys agree after alignment (see QC)">⚠</span>' : ""}</td>` +
     `<td>${r.bl}</td><td style="text-align:left"><div class="qcs">${r.qc.length ? r.qc.map(qcBadge).join("") : '<span class="badge ok">ok</span>'}</div></td></tr>`).join("");
   const bs = document.getElementById("bstate");
   bs.textContent = bounds.m1 == null ? "" : autoMode ? "auto · from landmarks" : "manual";
   bs.classList.toggle("auto", autoMode);
+  renderSizeDist(rows);
   renderExtended(rows);
   renderLandmarkLine();
   renderSensitivity(S);
@@ -1191,6 +1284,135 @@ function qcBadge(q) {
   for (const [re, f] of QC_SHORT) { const m = text.match(re); if (m) { lab = f(m); break; } }
   return `<span class="badge${warn ? " warn" : ""}" title="${esc(text).replace(/"/g, "&quot;")}">${esc(lab)}</span>`;
 }
+// ---- polysome size distribution: the partition per sample ----------------------------
+const REG_COLS = ["#c9d9ea", "#8fb4d8", "#4f86bd", "#2b5e93", "#173d66"];   // 2, 3, 4, 5, ≥6 (darker = heavier)
+const regColor = (g, k) => g.tail ? "#984ea3" : REG_COLS[Math.min(k, REG_COLS.length - 1)];
+const pct = v => Number.isFinite(v) ? (100 * v).toFixed(0) + " %" : "—";
+let sdRef = "";   // "" = shares; a group name = per-sample log2 fold vs that group's mean share (within block)
+function renderSizeDist(rows) {
+  const el = document.getElementById("sizedist");
+  if (!rows.length || !rows[0].regs || rows[0].regs.length < 2) { el.innerHTML = ""; return; }
+  const T = rows[0].regs.slice(1), f3 = v => Number.isFinite(v) ? v.toFixed(3) : "—", f2 = v => Number.isFinite(v) ? v.toFixed(2) : "—";
+  const cuts = T.filter(g => g.cut && g.cut.lab !== "heavy").map(g => g.cut);
+  const groups = [...new Set(rows.map(r => r.meta.group || ""))].filter(Boolean).sort();
+  const order = rows.slice().sort((a, b) => (a.meta.block || "").localeCompare(b.meta.block || "", undefined, { numeric: true }) || byName(a, b));
+  // cut badges: where each cut sits and whether it is a real valley
+  const cutLine = cuts.map(c => `<span class="chip" title="${c.rule === "valley" ? `detrended valley, median relative depth ${(c.depth * 100).toFixed(0)} %` : `valley too shallow (median depth ${Number.isFinite(c.depth) ? (c.depth * 100).toFixed(0) + " %" : "n/a"} < ${CUT_DEPTH * 100} %): cut at the midpoint between the apexes`}"><b>${c.lab}</b>${c.x.toFixed(1)} ${c.rule === "valley" ? "✓" : "≈ midpoint"}</span>`).join("") +
+    (T[T.length - 1].cut && T[T.length - 1].cut.lab === "heavy" ? `<span class="chip"><b>tail</b>${T[T.length - 1].a.toFixed(1)} manual</span>` : "");
+  // stacked bars: shares of Apoly per sample, one row per sample, blocks kept together
+  const LW = 190, BW = 640, RH = 22, LX = 16, top = 8, Wd = 1100, legendX = LX + LW + BW + 20;
+  let svg = `<svg viewBox="0 0 ${Wd} ${top + RH * order.length + 24}" style="max-width:${Wd}px">`;
+  order.forEach((r, i) => {
+    const y = top + RH * i; let x = LX + LW;
+    svg += `<text x="${LX}" y="${y + 15}" font-size="11.5" fill="#333">${esc((r.meta.block ? r.meta.block + " · " : "") + (r.name.length > 22 ? r.name.slice(0, 21) + "…" : r.name))}</text>`;
+    if (sdRef) {
+      // fold vs the reference group's mean share in the same block (overall mean if the block has none)
+      const ref = k => { const inB = rows.filter(q => q.meta.group === sdRef && q.meta.block === r.meta.block), pool = inB.length ? inB : rows.filter(q => q.meta.group === sdRef);
+        const v = pool.map(q => q.regs[k + 1].f).filter(Number.isFinite); return v.length ? v.reduce((z, q) => z + q, 0) / v.length : NaN; };
+      const cw = BW / T.length;
+      T.forEach((g, k) => { const l2 = Math.log2(r.regs[k + 1].f / ref(k)), cx = x + cw * k, mid = cx + cw / 2, sc = cw / 2 / 2;   // ±2 log2 units fill half a cell
+        if (Number.isFinite(l2)) { const w = Math.min(cw / 2, Math.abs(l2) * sc);
+          svg += `<rect x="${l2 < 0 ? mid - w : mid}" y="${y + 3}" width="${w}" height="${RH - 6}" fill="${l2 < 0 ? "#377eb8" : "#e6550d"}" opacity="0.8"/>` +
+                 `<text x="${mid + (l2 < 0 ? 4 : -4)}" y="${y + 15}" font-size="10" text-anchor="${l2 < 0 ? "start" : "end"}" fill="#333">${l2 >= 0 ? "+" : ""}${l2.toFixed(2)}</text>`; }
+        svg += `<line x1="${mid}" y1="${y + 1}" x2="${mid}" y2="${y + RH - 1}" stroke="#bbb"/>`; });
+    } else {
+      T.forEach((g, k) => { const f = r.regs[k + 1].f; if (!Number.isFinite(f) || f <= 0) return; const w = BW * f;
+        svg += `<rect x="${x}" y="${y + 3}" width="${w}" height="${RH - 6}" fill="${regColor(g, k)}"/>`;
+        if (w > 30) svg += `<text x="${x + w / 2}" y="${y + 15}" font-size="10" text-anchor="middle" fill="${k >= 2 || g.tail ? "#fff" : "#123"}">${pct(f)}</text>`;
+        x += w; });
+    }
+  });
+  if (sdRef) { const cw = BW / T.length; T.forEach((g, k) => svg += `<text x="${LX + LW + cw * k + cw / 2}" y="${top + RH * order.length + 14}" font-size="10.5" text-anchor="middle" fill="#555">${g.label}×</text>`); }
+  else T.forEach((g, k) => { const ly = top + 12 + 14 * k;
+    svg += `<rect x="${legendX}" y="${ly - 9}" width="12" height="11" fill="${regColor(g, k)}"/><text x="${legendX + 16}" y="${ly}" font-size="11" fill="#333">${g.label}-mer</text>`; });
+  svg += `</svg>`;
+  const opts = [`<option value="">shares of the polysome area</option>`].concat(groups.map(g => `<option value="${esc(g)}"${g === sdRef ? " selected" : ""}>log2 fold vs ${esc(g)} (within block)</option>`)).join("");
+  // per-sample table: areas, shares, ratios to mono, heavy/light, ribosomes per mRNA, boundary uncertainty
+  let tb = `<div style="overflow-x:auto"><table style="margin-top:8px;font-size:12px"><thead><tr><th>Sample</th>` +
+    rows[0].regs.map(g => `<th>A${g.label}${g.tail ? " (tail)" : ""}</th>`).join("") + T.map(g => `<th>f${g.label}</th>`).join("") + T.map(g => `<th>${g.label}× / 1×</th>`).join("") +
+    `<th>Heavy / light</th><th>Ribosomes / polysomal mRNA</th>` + rows[0].regs.map(g => `<th>u${g.label}</th>`).join("") + `</tr></thead><tbody>`;
+  for (const r of order) {
+    const weak = g => Number.isFinite(g.u) && g.u > 0.25 ? ' style="color:#999" title="boundary uncertainty above 25 % — a weak cut"' : "";
+    tb += `<tr><td>${esc(r.name)}</td>` + r.regs.map(g => `<td${weak(g)}>${f3(g.area)}</td>`).join("") + T.map((g, k) => `<td${weak(r.regs[k + 1])}>${pct(r.regs[k + 1].f)}</td>`).join("") +
+      T.map((g, k) => `<td${weak(r.regs[k + 1])}>${f2(r.regs[k + 1].r1)}</td>`).join("") + `<td>${f2(r.hl)}</td><td>${Number.isFinite(r.rpm) ? "≥ " + r.rpm.toFixed(2) : "—"}</td>` +
+      r.regs.map(g => `<td>${pct(g.u)}</td>`).join("") + `</tr>`;
+  }
+  tb += `</tbody></table></div>`;
+  el.innerHTML = `<details class="extd"${clOpen("sizedist") ? " open" : ""} data-cl="sizedist"><summary><b>Polysome size distribution</b> <span class="dim">the polysome area split at the ladder valleys — per n-mer areas, shares, heavy / light, ribosomes per mRNA</span>${HELP_ICON("metrics")}</summary>` +
+    `<div style="margin-top:6px"><span class="dim">cuts (aligned mm):</span> ${cutLine} <span class="dim">· same baseline as Poly / Mono, so the regions add up to the polysome area; u = boundary uncertainty (OD above baseline at each edge × ${CUT_SHIFT} mm, as % of the area); grey = weak cut (u &gt; 25 %)</span></div>` +
+    `<div style="margin:8px 0 2px"><label class="dim">show <select id="sdref">${opts}</select></label></div>` + svg + tb + `</details>`;
+  const sel = el.querySelector("#sdref"); if (sel) sel.addEventListener("change", e => { sdRef = e.target.value; renderSizeDist(rows); });
+}
+
+// ---- cross-sample ratios per region: per-block log2(A/B) with the cut-shift range ----
+function regNorm() { return document.getElementById("regnorm").value; }
+function regValue(r, k, norm) {
+  const a = r.regs[k].area;
+  if (norm === "rib") return a / r.rib;
+  if (norm === "a260") return a / r.meta.a260;
+  if (norm === "raw") return a;
+  return a / (r.aucM + r.aucP);                     // share of mono + poly (default)
+}
+function regionContrasts(rows, norm) {
+  if (!rows.length || !rows[0].regs) return null;
+  norm = norm || regNorm();
+  const K = rows[0].regs.length, base = rows[0].regs.map(g => ({ n: g.n, label: g.label, tail: g.tail }));
+  const per = [];
+  for (let k = 0; k < K; k++) per.push(contrastTable(rows, r => regValue(r, k, norm)));
+  // range: every effective cut moved ±CUT_SHIFT, one at a time, all samples together
+  const eff = rows[0].regs.slice(1).filter(g => g.cut).map(g => g.cut);
+  const lo = per.map(c => c.map(x => x.mean)), hi = per.map(c => c.map(x => x.mean));
+  eff.forEach((c, j) => { for (const d of [-CUT_SHIFT, CUT_SHIFT]) {
+    const cuts = eff.map((q, i) => i === j ? { ...q, x: q.x + d } : q);
+    const rv = computeResults({ realign: false, cuts });
+    if (!rv.length || rv[0].regs.length !== K) continue;
+    for (let k = 0; k < K; k++) contrastTable(rv, r => regValue(r, k, norm)).forEach((x, ci) => {
+      if (!Number.isFinite(x.mean)) return;
+      lo[k][ci] = Math.min(lo[k][ci], x.mean); hi[k][ci] = Math.max(hi[k][ci], x.mean); });
+  } });
+  return { regions: base, per, lo, hi, norm, variants: eff.length * 2 };
+}
+function renderRegionContrasts(rows) {
+  const RC = regionContrasts(rows), C = RC && RC.per[0];
+  if (!RC || !C || !C.length) return "";
+  const f = v => Number.isFinite(v) ? v.toFixed(3) : "—", NORM = { share: "share of mono + poly", rib: "per ribosomal AUC", a260: "per loaded A260", raw: "raw area" };
+  let warn = "";
+  if (RC.norm === "raw") { const off = rows.filter(r => Number.isFinite(r.load) && Math.abs(r.load) > 0.10).map(r => r.name);
+    if (off.length) warn = `<div class="warn">raw areas compare loading as much as biology — loading QC fails for ${off.map(esc).join(", ")}; use a normalised mode</div>`; }
+  if (RC.norm === "a260" && rows.some(r => !Number.isFinite(r.meta.a260))) warn += `<div class="warn">loaded A260 is missing for some samples — those drop out of the contrast</div>`;
+  // profile charts: one per contrast, x = region, y = log2(A/B) with per-block points, mean ± SD and the cut-shift range
+  const PW = 320, PH = 190, ml = 40, mr = 10, mt = 26, mb = 30, K = RC.regions.length;
+  let charts = `<div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px">`;
+  C.forEach((c0, ci) => {
+    const vals = []; for (let k = 0; k < K; k++) { const c = RC.per[k][ci]; vals.push(c.mean, RC.lo[k][ci], RC.hi[k][ci], ...c.per.map(p => p.d)); }
+    const fin = vals.filter(Number.isFinite); if (!fin.length) return;
+    let ymax = Math.max(0.5, ...fin.map(Math.abs)) * 1.15, ymin = -ymax;
+    const sy = v => mt + (1 - (v - ymin) / (ymax - ymin)) * (PH - mt - mb), cw = (PW - ml - mr) / K;
+    let g = `<svg viewBox="0 0 ${PW} ${PH}" style="width:${PW}px;height:${PH}px;border:1px solid #e3e8ed;border-radius:6px">` +
+      `<text x="${ml}" y="15" font-size="11.5" font-weight="600" fill="#333">${esc(c0.label)}</text>` +
+      `<text x="${PW - mr}" y="15" font-size="10" text-anchor="end" fill="#888">log2(A / B), ${esc(NORM[RC.norm])}</text>` +
+      `<line x1="${ml}" y1="${sy(0)}" x2="${PW - mr}" y2="${sy(0)}" stroke="#999"/>`;
+    for (const v of niceTicks(ymin, ymax, 4)) g += `<text x="${ml - 4}" y="${sy(v) + 3}" font-size="9.5" text-anchor="end" fill="#666">${v}</text><line x1="${ml - 2}" y1="${sy(v)}" x2="${ml}" y2="${sy(v)}" stroke="#999"/>`;
+    for (let k = 0; k < K; k++) { const c = RC.per[k][ci], x = ml + cw * k + cw / 2, lo = RC.lo[k][ci], hi = RC.hi[k][ci];
+      if (Number.isFinite(lo) && Number.isFinite(hi) && hi > lo) g += `<rect x="${x - 9}" y="${sy(hi)}" width="18" height="${Math.max(1, sy(lo) - sy(hi))}" fill="#bbb" opacity="0.35"><title>range over ${RC.variants} cut shifts of ±${CUT_SHIFT} mm: ${f(lo)} – ${f(hi)}</title></rect>`;
+      if (Number.isFinite(c.sd)) g += `<line x1="${x}" y1="${sy(c.mean - c.sd)}" x2="${x}" y2="${sy(c.mean + c.sd)}" stroke="#333"/>`;
+      if (Number.isFinite(c.mean)) g += `<line x1="${x - 7}" y1="${sy(c.mean)}" x2="${x + 7}" y2="${sy(c.mean)}" stroke="#333" stroke-width="2"/>`;
+      c.per.forEach(pb => g += `<circle cx="${x + (Math.random() - 0.5) * 0}" cy="${sy(pb.d)}" r="2.6" fill="${RC.regions[k].tail ? "#984ea3" : "#e6550d"}" opacity="0.85"><title>block ${esc(pb.block)}: ${pb.d.toFixed(3)}</title></circle>`);
+      g += `<text x="${x}" y="${PH - mb + 14}" font-size="10.5" text-anchor="middle" fill="#444">${RC.regions[k].label}×</text>`; }
+    g += `<text x="${(ml + PW - mr) / 2}" y="${PH - 4}" font-size="10" text-anchor="middle" fill="#888">per-block points · mean ± SD · grey = cut-shift range</text></svg>`;
+    charts += g;
+  });
+  charts += `</div>`;
+  let h = `<div style="margin-top:12px"><b>Ratios per region</b>${HELP_ICON("stats")} <span class="dim">— per-block log2(A / B) of each region's normalised area (${esc(NORM[RC.norm])}); the grey band is the range when each cut is moved ±${CUT_SHIFT} mm</span></div>` + warn + charts;
+  let tb = `<div style="overflow-x:auto"><table style="margin-top:6px;font-size:12px"><thead><tr><th>Contrast</th><th>region</th><th>blocks</th><th>per-block log2</th><th>mean</th><th>SD</th><th>fold</th><th>cut-shift range</th><th>paired t</th><th>p</th></tr></thead><tbody>`;
+  C.forEach((c0, ci) => { for (let k = 0; k < K; k++) { const c = RC.per[k][ci], lo = RC.lo[k][ci], hi = RC.hi[k][ci];
+    const straddle = Number.isFinite(lo) && Number.isFinite(hi) && lo < 0 && hi > 0;
+    tb += `<tr><td style="text-align:left">${k ? "" : esc(c0.label)}</td><td>${RC.regions[k].label}×</td><td>${c.n}</td><td style="text-align:left">${c.per.map(p => `${esc(p.block)}: ${p.d.toFixed(3)}`).join("; ") || "—"}</td>` +
+      `<td${straddle ? ' style="color:#999" title="the cut-shift range straddles 0: not distinguishable from 1 at this resolution"' : ""}>${f(c.mean)}</td><td>${f(c.sd)}</td><td>${Number.isFinite(c.mean) ? Math.pow(2, c.mean).toFixed(2) + "×" : "—"}</td>` +
+      `<td>${Number.isFinite(lo) ? f(lo) + " – " + f(hi) : "—"}</td><td>${f(c.t)}</td><td>${Number.isFinite(c.p) ? c.p.toFixed(3) : "—"}</td></tr>`; } });
+  return h + collapsible("regc", "per-region contrast table", tb + `</tbody></table></div>`);
+}
+
 function renderExtended(rows) {
   const el = document.getElementById("ext");
   if (!rows.length) { el.innerHTML = ""; return; }
@@ -1201,9 +1423,9 @@ function renderExtended(rows) {
     `first peak (OD) = apex of the free-RNA peak (above ~3 OD the detector may be non-linear, then prefer the ribosomal AUC = g1 → endpoint for loading); ` +
     `polysome fraction = Apoly/(Apoly+A80); free-subunit fraction = (A40+A60)/ribosomal; molar 40S:60S = area ratio ÷ 0.35; ` +
     `A2/A3 = disome and trisome regions between the consensus valleys (g4 → v23 → v34), same baseline as the polysomes; ` +
-    `heavy fraction = AUC[heavy…end] / AUC[mono+poly] with the heavy boundary auto-set at the 3|4 valley when the ladder resolves; landmark positions are raw (unaligned) mm.</span></div>` +
+    `heavy fraction = AUC[tail…end] / AUC[mono+poly] with the tail starting at the last usable ladder cut (see the size distribution); landmark positions are raw (unaligned) mm.</span></div>` +
     `<div style="overflow-x:auto"><table style="margin-top:6px;font-size:12px"><thead><tr><th>Sample</th><th>First peak (OD)</th><th>A40</th><th>A60</th>` +
-    `<th>Poly fraction</th><th>Free-subunit fraction</th><th>Molar 40S:60S</th><th>A2 (disome)</th><th>A3 (trisome)</th><th>Heavy fraction (≥4)</th><th>40S / 60S / 80S (mm)</th><th>2- / 3- / 4-mer (mm)</th>` +
+    `<th>Poly fraction</th><th>Free-subunit fraction</th><th>Molar 40S:60S</th><th>A2 (disome)</th><th>A3 (trisome)</th><th>Heavy fraction (tail)</th><th>40S / 60S / 80S (mm)</th><th>2- / 3- / 4-mer (mm)</th>` +
     `<th>Polysome ladder</th><th>End slope (mOD/mm)</th></tr></thead><tbody>`;
   for (const r of rows)
     h += `<tr><td>${esc(r.name)}</td><td>${f2(r.p0y)}</td><td>${f3(r.a40)}</td><td>${f3(r.a60)}</td><td>${f3(r.pf)}</td><td>${f3(r.fs)}</td>` +
@@ -1278,7 +1500,7 @@ function renderContrasts(rows) {
     h += `<tr><td style="text-align:left">${esc(c.label)}</td><td>${c.n}</td><td style="text-align:left">${c.per.map(p => `${esc(p.block)}: ${p.d.toFixed(3)}`).join("; ") || "—"}</td>` +
          `<td>${f(c.mean)}</td><td>${f(c.sd)}</td><td>${Number.isFinite(c.mean) ? Math.pow(2, c.mean).toFixed(2) + "×" : "—"}</td><td>${f(c.t)}</td><td>${Number.isFinite(c.p) ? c.p.toFixed(3) : "—"}</td><td style="text-align:left">${verdict}</td></tr>`;
   }
-  el.innerHTML = h + `</tbody></table>`;
+  el.innerHTML = h + `</tbody></table>` + renderRegionContrasts(rows);
 }
 // least-squares scale between two baseline-subtracted, aligned traces over [m1, p3]
 function scalePairs(rows) {
@@ -1333,7 +1555,7 @@ function sessionObj() {
   const samples = {};
   for (const t of traces) samples[t.name] = { ...(t.meta || {}), visible: t.visible, blank: !!t.blank };
   return { app: "polysome-auc-viewer", version: VERSION, saved: new Date().toISOString(),
-    settings: { ...settingsObj(), cropy: document.getElementById("cropy").checked, autoMode, locked, sort: sortState, xZoom },
+    settings: { ...settingsObj(), cropy: document.getElementById("cropy").checked, autoMode, locked, sort: sortState, xZoom, sdRef },
     samples };
 }
 function applySession(o, quiet) {
@@ -1350,6 +1572,8 @@ function applySession(o, quiet) {
   if ("despike" in s) document.getElementById("despike").checked = !!s.despike;
   if ("cropy" in s) document.getElementById("cropy").checked = !!s.cropy;
   if ("contrasts" in s) document.getElementById("contrasts_in").value = s.contrasts || "";
+  if (s.regionNorm) document.getElementById("regnorm").value = s.regionNorm;
+  if ("sdRef" in s) sdRef = s.sdRef || "";
   if (s.sort) sortState = s.sort;
   xZoom = Array.isArray(s.xZoom) ? s.xZoom : null;
   locked = !!s.locked;
@@ -1416,7 +1640,8 @@ function settingsObj() {
   return { version: VERSION, profile: { name: profileName, ...PROF }, t0: bounds.t0, m1: bounds.m1, m2: bounds.m2, p3: bounds.p3, h: bounds.h, ref80: REF80, baseline: document.getElementById("bmode").value,
     alignMode: document.getElementById("alignmode").value,
     anchors: document.getElementById("anchors").value, align: document.getElementById("alignx").checked, despike: despikeOn(),
-    blank: bl ? bl.name : "", contrasts: document.getElementById("contrasts_in").value,
+    blank: bl ? bl.name : "", contrasts: document.getElementById("contrasts_in").value, regionNorm: regNorm(),
+    regions: { cut_depth: CUT_DEPTH, cut_shift: CUT_SHIFT },
     excluded: traces.filter(t => t.meta && t.meta.excl).map(t => t.name + ": " + t.meta.excl),
     qc: { spike_sigma: 10, spike_floor: 0.003, loading: 0.10, valley_tol: LM_TOL, rising_slope: 0.0003, prominence_floor: 0.003 } };
 }
@@ -1427,11 +1652,25 @@ function renderLock() {
   document.getElementById("lockbtn").textContent = locked ? "Unlock settings" : "Lock settings";
   document.getElementById("lockinfo").textContent = locked ? `locked · settings hash ${settingsHash()} (stamped on exports)` : `settings hash ${settingsHash()}`;
 }
+// region columns shared by the exports: fixed slots 2, 3, 4 and the tail (n/a where the
+// partition has no such region), so the wide table keeps one shape across sessions
+function regCols(r) {
+  const byN = n => r.regs ? r.regs.find(g => g.n === n && !g.tail) : null, tail = r.regs ? r.regs[r.regs.length - 1] : null;
+  const A = n => { const g = byN(n); return g ? g.area : NaN; }, F = n => { const g = byN(n); return g ? g.f : NaN; }, U = n => { const g = byN(n); return g ? g.u : NaN; };
+  const cut = lab => { const g = r.regs && r.regs.find(q => q.cut && q.cut.lab === lab); return g ? g.a : NaN; };
+  return { hl: r.hl, rpm: r.rpm, tailN: r.tailN, a4: A(4), aTail: tail && tail.tail ? tail.area : NaN,
+           f2: F(2), f3: F(3), f4: F(4), fTail: tail && tail.tail ? tail.f : NaN,
+           u1: r.regs ? r.regs[0].u : NaN, u2: U(2), u3: U(3), u4: U(4), uTail: tail && tail.tail ? tail.u : NaN,
+           c23: cut("2|3"), c34: cut("3|4"), c45: cut("4|5") };
+}
+const REG_CSV = ["heavy_light", "ribosomes_per_polysomal_mrna_lower_bound", "tail_n", "a4_tetrasome", "a_tail", "f2", "f3", "f4", "f_tail", "u1", "u2", "u3", "u4", "u_tail", "cut_2_3_mm", "cut_3_4_mm", "cut_4_5_mm"];
+const REG_KEYS = ["hl", "rpm", "tailN", "a4", "aTail", "f2", "f3", "f4", "fTail", "u1", "u2", "u3", "u4", "uTail", "c23", "c34", "c45"];
 function tidyCsv() {
   const rows = computeResults(), S = sensitivity(), hash = settingsHash(), rng = sensRanges(S);
   const M = [["total_auc", r => r.tot], ["ribosomal_auc", r => r.rib], ["first_peak_od", r => r.p0y], ["auc_monosome", r => r.aucM], ["auc_polysomes", r => r.aucP], ["poly_over_mono", r => r.pm],
     ["mono_over_poly", r => r.mp], ["log2_poly_over_mono", r => r.l2], ["polysome_fraction", r => r.pf], ["a40", r => r.a40], ["a60", r => r.a60],
-    ["free_subunit_fraction", r => r.fs], ["molar_40s_60s", r => r.molar], ["a2_disome", r => r.a2], ["a3_trisome", r => r.a3], ["heavy_fraction", r => r.hf], ["x_shift_mm", r => r.off], ["x_scale", r => r.scale],
+    ["free_subunit_fraction", r => r.fs], ["molar_40s_60s", r => r.molar], ["a2_disome", r => r.a2], ["a3_trisome", r => r.a3], ["heavy_fraction", r => r.hf],
+    ...REG_CSV.map((name, i) => [name, r => regCols(r)[REG_KEYS[i]]]), ["x_shift_mm", r => r.off], ["x_scale", r => r.scale],
     ["end_slope_od_per_mm", r => r.slope], ["mono_over_poly_sd_noise", r => r.mpSd],
     ["mono_over_poly_sens_min", r => rng[r.key] ? rng[r.key][0] : NaN], ["mono_over_poly_sens_max", r => rng[r.key] ? rng[r.key][1] : NaN]];
   const head = "sample,block,group,loaded_a260,scan_time,excluded,exclude_reason,ladder,qc,metric,value,settings_hash,tool_version\n";
@@ -1530,13 +1769,14 @@ const HELP_ICON = tab => `<a class="hl" href="#help" data-help="${tab}" title="o
 document.getElementById("dl").addEventListener("click", () => {
   const rows = computeResults(), rngC = sensRanges(sensitivity());
   const head = "sample,total_auc,ribosomal_auc,first_peak_od,auc_monosome,auc_polysomes,mono_over_poly,mono_over_poly_sd_noise,mono_over_poly_sens_min,mono_over_poly_sens_max,poly_over_mono,log2_poly_over_mono," +
-               "polysome_fraction,a40,a60,free_subunit_fraction,molar_40s_60s,a2_disome,a3_trisome,auc_heavy,heavy_fraction,n2_mm,n3_mm,n4_mm," +
+               "polysome_fraction,a40,a60,free_subunit_fraction,molar_40s_60s,a2_disome,a3_trisome,auc_heavy,heavy_fraction," + REG_CSV.join(",") + ",region_norm,n2_mm,n3_mm,n4_mm," +
                "x_shift_mm,x_scale,x40_mm,x60_mm,x80_mm,polysome_peaks,ladder,end_slope_od_per_mm,qc," +
                "total_from_mm,mono_from_mm,mono_to_mm,poly_to_mm,heavy_from_mm,ref_80s_mm,baseline_mode,baseline_anchors_mm,despike,blank,block,group,loaded_a260,scan_time,settings_hash,tool_version\n";
   const mode = document.getElementById("bmode").value, blank = traces.find(t => t.blank);
   const n5 = v => Number.isFinite(v) ? v.toFixed(5) : "";
   const body = rows.map(r => [JSON.stringify(r.name), n5(r.tot), n5(r.rib), n5(r.p0y), n5(r.aucM), n5(r.aucP),
-    n5(r.mp), n5(r.mpSd), n5(rngC[r.key] ? rngC[r.key][0] : NaN), n5(rngC[r.key] ? rngC[r.key][1] : NaN), n5(r.pm), n5(r.l2), n5(r.pf), n5(r.a40), n5(r.a60), n5(r.fs), n5(r.molar), n5(r.a2), n5(r.a3), n5(r.aucH), n5(r.hf), r.n2 ?? "", r.n3 ?? "", r.n4 ?? "",
+    n5(r.mp), n5(r.mpSd), n5(rngC[r.key] ? rngC[r.key][0] : NaN), n5(rngC[r.key] ? rngC[r.key][1] : NaN), n5(r.pm), n5(r.l2), n5(r.pf), n5(r.a40), n5(r.a60), n5(r.fs), n5(r.molar), n5(r.a2), n5(r.a3), n5(r.aucH), n5(r.hf),
+    ...REG_KEYS.map(k => n5(regCols(r)[k])), regNorm(), r.n2 ?? "", r.n3 ?? "", r.n4 ?? "",
     (r.off || 0).toFixed(2), r.scale.toFixed(4), r.x40 ?? "", r.x60 ?? "", r.x80 ?? "", r.nPoly, JSON.stringify(r.ladder), n5(r.slope), JSON.stringify(r.qc.join("; ")),
     Number.isFinite(bounds.t0) ? bounds.t0 : "", bounds.m1, bounds.m2, bounds.p3, heavyOn() ? bounds.h : "", REF80, mode,
     JSON.stringify(mode === "anchors" ? parseAnchors().join(" ") : ""), despikeOn() ? "on" : "off",
@@ -1575,6 +1815,7 @@ document.getElementById("bmode").addEventListener("change", () => {
 });
 document.getElementById("anchors").addEventListener("change", render);
 document.getElementById("contrasts_in").addEventListener("change", render);
+document.getElementById("regnorm").addEventListener("change", render);
 document.getElementById("lockbtn").addEventListener("click", () => { locked = !locked; renderLock(); });
 document.getElementById("dltidy").addEventListener("click", () => {
   const a = document.createElement("a");
@@ -1698,6 +1939,28 @@ ${sers}
 </c:plotArea>${withLegend ? '<c:legend><c:legendPos val="b"/><c:overlay val="0"/></c:legend>' : ""}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart></c:chartSpace>`;
 }
 
+// horizontal stacked bar chart: categories in column A of `sheet` (rows 2..n+1), one
+// series per entry of `cols` ({col: 1-based column, name, color}) — the size distribution
+function barChartXml(sheet, n, cols, title) {
+  const f = r => `&apos;${sheet.replace(/&/g,"&amp;").replace(/'/g,"''")}&apos;!${r}`;
+  const sers = cols.map((c, i) => `<c:ser><c:idx val="${i}"/><c:order val="${i}"/>
+<c:tx><c:strRef><c:f>${f("$" + colL(c.col) + "$1")}</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>${xesc(c.name)}</c:v></c:pt></c:strCache></c:strRef></c:tx>
+<c:spPr><a:solidFill><a:srgbClr val="${c.color}"/></a:solidFill></c:spPr>
+<c:cat><c:strRef><c:f>${f("$A$2:$A$" + (n + 1))}</c:f></c:strRef></c:cat>
+<c:val><c:numRef><c:f>${f("$" + colL(c.col) + "$2:$" + colL(c.col) + "$" + (n + 1))}</c:f></c:numRef></c:val></c:ser>`).join("");
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" ${XA} ${XR}>
+<c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>${xesc(title)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>
+<c:autoTitleDeleted val="0"/><c:plotArea><c:layout/>
+<c:barChart><c:barDir val="bar"/><c:grouping val="stacked"/><c:varyColors val="0"/>${sers}<c:gapWidth val="60"/><c:overlap val="100"/>
+<c:axId val="333333333"/><c:axId val="444444444"/></c:barChart>
+<c:catAx><c:axId val="333333333"/><c:scaling><c:orientation val="maxMin"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:crossAx val="444444444"/></c:catAx>
+<c:valAx><c:axId val="444444444"/><c:scaling><c:orientation val="minMax"/><c:max val="1"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="b"/>
+<c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>share of the polysome area</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>
+<c:crossAx val="333333333"/></c:valAx>
+</c:plotArea><c:legend><c:legendPos val="b"/><c:overlay val="0"/></c:legend><c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart></c:chartSpace>`;
+}
+
 // tallest OD inside the mono/poly window (shifted positions), for y-axis caps
 function regionYMax(t) {
   let m = -Infinity; const y = Y_(t);
@@ -1726,14 +1989,15 @@ function buildXlsx() {
   const rows = computeResults();
   const S = sensitivity();
   const mode = document.getElementById("bmode").value;
-  const used = new Set(["summary", "sensitivity", "contrasts"]);
+  const used = new Set(["summary", "sensitivity", "contrasts", "regions"]);
   const sheets = vis.map((t, i) => ({ t, name: sheetSafe(t.name, used) }));
 
   // Summary sheet
   const sHead = ["Sample","Total AUC","Ribosomal AUC","First peak (OD)","AUC monosome","AUC polysomes","Mono / Poly","Poly / Mono","log2 (Poly / Mono)",
                  "Polysome fraction","A40","A60","Free-subunit fraction","Molar 40S:60S","A2 (disome)","A3 (trisome)","AUC heavy","Heavy fraction",
                  "x-shift (mm)","x-scale","x-shift flag","40S (mm)","60S (mm)","80S (mm)","Polysome ladder","End slope (OD/mm)","Baseline","QC",
-                 "Block","Group","Loaded A260","Scan time"];
+                 "Block","Group","Loaded A260","Scan time",
+                 "Heavy / light","Ribosomes / polysomal mRNA (lower bound)","Tail n","A4 (tetrasome)","A tail","f2","f3","f4","f tail","u1","u2","u3","u4","u tail","Cut 2|3 (mm)","Cut 3|4 (mm)","Cut 4|5 (mm)","Region normalisation"];
   let sm = `<row r="1">` + sHead.map((h, c) => cellS(1, c + 1, h)).join("") + `</row>`;
   // numeric cell only for finite values — <v>NaN</v> is invalid OOXML
   const cellV = (rn, c, v, d) => Number.isFinite(v) ? cellN(rn, c, v.toFixed(d)) : cellS(rn, c, "n/a");
@@ -1744,7 +2008,9 @@ function buildXlsx() {
       cellS(rn, 21, Math.abs(r.off) >= 2 ? "shift >= 2 mm (check valley agreement)" : "") +
       cellV(rn, 22, r.x40, 1) + cellV(rn, 23, r.x60, 1) + cellV(rn, 24, r.x80, 1) + cellS(rn, 25, r.ladder) + cellV(rn, 26, r.slope, 5) +
       cellS(rn, 27, r.bl) + cellS(rn, 28, r.qc.join("; ")) + cellS(rn, 29, r.meta.block || "") + cellS(rn, 30, r.meta.group || "") +
-      cellV(rn, 31, r.meta.a260, 3) + cellS(rn, 32, r.scan || "") + `</row>`;
+      cellV(rn, 31, r.meta.a260, 3) + cellS(rn, 32, r.scan || "") +
+      REG_KEYS.map((k, j) => { const v = regCols(r)[k]; return k === "tailN" ? (Number.isFinite(v) ? cellN(rn, 33 + j, v) : cellS(rn, 33 + j, "n/a")) : cellV(rn, 33 + j, v, k.startsWith("c") ? 1 : 5); }).join("") +
+      cellS(rn, 33 + REG_KEYS.length, regNorm()) + `</row>`;
   });
   const setRow0 = rows.length + 3;
   const fitY = document.getElementById("cropy").checked;
@@ -1862,6 +2128,36 @@ function buildXlsx() {
     wbSheets += `<sheet name="Sensitivity" sheetId="${sn}" r:id="rId${sn}"/>`;
     wbRels += `<Relationship Id="rId${sn}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${sn}.xml"/>`;
   }
+  // Regions sheet: the partition per sample + a stacked bar chart of the shares
+  if (rows.length && rows[0].regs && rows[0].regs.length > 1) {
+    const sn = nextId++, T = rows[0].regs.slice(1), R0 = rows[0].regs;
+    const head = ["Sample", "Block", "Group"].concat(R0.map(g => "A" + g.label + (g.tail ? " (tail)" : "")), T.map(g => "f" + g.label), T.map(g => g.label + "x / 1x"),
+      ["Heavy / light", "Ribosomes / polysomal mRNA (lower bound)"], R0.map(g => "u" + g.label));
+    let sr = `<row r="1">` + head.map((h, k) => cellS(1, k + 1, h)).join("") + `</row>`;
+    const ord = rows.slice().sort((a, b) => (a.meta.block || "").localeCompare(b.meta.block || "", undefined, { numeric: true }) || byName(a, b));
+    ord.forEach((r, i) => { const rn = i + 2; let c = 1;
+      sr += `<row r="${rn}">` + cellS(rn, c++, r.name) + cellS(rn, c++, r.meta.block || "") + cellS(rn, c++, r.meta.group || "") +
+        r.regs.map(g => cellV(rn, c++, g.area, 5)).join("") + T.map((g, k) => cellV(rn, c++, r.regs[k + 1].f, 5)).join("") + T.map((g, k) => cellV(rn, c++, r.regs[k + 1].r1, 5)).join("") +
+        cellV(rn, c++, r.hl, 5) + cellV(rn, c++, r.rpm, 4) + r.regs.map(g => cellV(rn, c++, g.u, 4)).join("") + `</row>`; });
+    const noteRow = ord.length + 3;
+    sr += `<row r="${noteRow}">` + cellS(noteRow, 1, `Regions cut at the consensus ladder valleys (median relative depth >= ${CUT_DEPTH * 100} %, otherwise the apex midpoint), same baseline as Poly/Mono, so they add up to the polysome area. u = boundary uncertainty: OD above baseline at each edge x ${CUT_SHIFT} mm, as a fraction of the area. Ribosomes per polysomal mRNA counts the tail at its lower-bound n.`) + `</row>`;
+    const fCols = T.map((g, k) => ({ col: 4 + R0.length + k, name: g.label + "-mer", color: regColor(g, k).replace("#", "").toUpperCase() }));
+    const shName = "Regions";   // reserved in `used` above, so no sample sheet can take it
+    files.push({ name: `xl/worksheets/sheet${sn}.xml`, text: sheetXml({ rows: sr, drawing: `<drawing r:id="rId1"/>` }) });
+    files.push({ name: `xl/worksheets/_rels/sheet${sn}.xml.rels`, text: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing${sn}.xml"/></Relationships>` });
+    files.push({ name: `xl/drawings/drawing${sn}.xml`, text: drawingXml(0, noteRow + 1, 11, noteRow + 4 + Math.max(8, ord.length)) });
+    files.push({ name: `xl/drawings/_rels/drawing${sn}.xml.rels`, text: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart${sn}.xml"/></Relationships>` });
+    files.push({ name: `xl/charts/chart${sn}.xml`, text: barChartXml(shName, ord.length, fCols, "Polysome size distribution (share of the polysome area)") });
+    ct.push(`<Override PartName="/xl/worksheets/sheet${sn}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`);
+    ct.push(`<Override PartName="/xl/drawings/drawing${sn}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>`);
+    ct.push(`<Override PartName="/xl/charts/chart${sn}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>`);
+    wbSheets += `<sheet name="${xesc(shName)}" sheetId="${sn}" r:id="rId${sn}"/>`;
+    wbRels += `<Relationship Id="rId${sn}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${sn}.xml"/>`;
+  }
   {
     const C = contrastTable(rows, r => r.pm), P = scalePairs(rows);
     if (C.length || P.length) {
@@ -1872,6 +2168,14 @@ function buildXlsx() {
         cellS(rn, 8, c.per.map(p => p.block + ": " + p.d.toFixed(4)).join("; ") + (c.n < 3 ? "  [n < 3 blocks: descriptive only]" : "")) + `</row>`; }
       rn += 2; sr += `<row r="${rn}">` + ["Scale test A", "B", "c (A ≈ c·B)", "residual (fraction of A RMS)"].map((h, k) => cellS(rn, k + 1, h)).join("") + `</row>`;
       for (const p of P) { rn++; sr += `<row r="${rn}">` + cellS(rn, 1, p.a) + cellS(rn, 2, p.b) + cellV(rn, 3, p.c, 4) + cellV(rn, 4, p.res, 4) + `</row>`; }
+      const RC = regionContrasts(rows);
+      if (RC && RC.per[0] && RC.per[0].length) {
+        rn += 2; sr += `<row r="${rn}">` + ["Region contrasts (" + regNorm() + ")", "region", "blocks", "mean log2(A/B)", "SD", "fold", "cut-shift range lo", "cut-shift range hi", "paired t", "p", "per-block"].map((h, k) => cellS(rn, k + 1, h)).join("") + `</row>`;
+        RC.per[0].forEach((c0, ci) => RC.regions.forEach((g, k) => { const c = RC.per[k][ci]; rn++;
+          sr += `<row r="${rn}">` + cellS(rn, 1, c0.label) + cellS(rn, 2, g.label + "x") + cellN(rn, 3, c.n) + cellV(rn, 4, f5(c.mean), 5) + cellV(rn, 5, f5(c.sd), 5) +
+            cellV(rn, 6, Number.isFinite(c.mean) ? Math.pow(2, c.mean) : NaN, 4) + cellV(rn, 7, RC.lo[k][ci], 5) + cellV(rn, 8, RC.hi[k][ci], 5) + cellV(rn, 9, f5(c.t), 4) + cellV(rn, 10, f5(c.p), 5) +
+            cellS(rn, 11, c.per.map(p => p.block + ": " + p.d.toFixed(4)).join("; ")) + `</row>`; }));
+      }
       files.push({ name: `xl/worksheets/sheet${sn}.xml`, text: sheetXml({ rows: sr }) });
       ct.push(`<Override PartName="/xl/worksheets/sheet${sn}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`);
       wbSheets += `<sheet name="Contrasts" sheetId="${sn}" r:id="rId${sn}"/>`;
@@ -1968,10 +2272,10 @@ for (const k of ["ref80", "lmStart", "w80lo", "w80hi", "stepLo", "stepHi", "g4lo
 // tiny hook so the tool can be driven for automated testing (harmless in normal use)
 window.__pav = { addFileText, setBounds: (a,b,c,h,t0) => { bounds.m1=a; bounds.m2=b; bounds.p3=c; bounds.h = h ?? null;
   if (t0 !== undefined) bounds.t0 = t0; autoMode = false; syncInputs(); render(); },
-  results: computeResults, traces: () => traces, buildXlsx, sensitivity, autoBounds, landmarks: () => landmarks,
+  results: computeResults, traces: () => traces, buildXlsx, sensitivity, autoBounds: () => { prepare(); return autoBounds(); }, landmarks: () => landmarks,
   setBlank: i => { traces.forEach((t, k) => { t.blank = (k === i); if (t.blank) t.visible = false; }); renderTraceList(); render(); },
   tidyCsv, settingsHash, contrastTable, scalePairs, sessionObj, applySession, applyProfile, profile: () => PROF, shareUrl, decodeSession,
-  setZoom: z => { xZoom = z; render(); } };
+  regionCuts, regionSet, regionContrasts, regCols, setZoom: z => { xZoom = z; render(); } };
 </script>
 </body>
 </html>

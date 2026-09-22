@@ -5,6 +5,24 @@ into the settings hash) is bumped **only for changes that affect computed number
 landmark detection, alignment, boundary rules, baselines, integration, metrics, QC
 thresholds. Documentation, layout and export-format changes do not bump it.
 
+## 1.3 — 2026-09-22
+Polysome size distribution. The polysome window is cut into one partition of n-mer
+regions at the consensus ladder valleys — a valley is used as a cut when its median
+relative depth (drop below the apex-to-apex line, over the lower apex's height above the
+flat minimum) is ≥ 10 %, otherwise the cut falls to the midpoint between the two apexes;
+the tail "≥ n" starts at the last usable cut, which is now also the auto heavy boundary
+(it was fixed at the 3|4 valley). Every region uses the polysome baseline, so the regions
+add up to Apoly exactly. New per sample: A2 … A_tail, shares of Apoly, ratios to the
+monosome, heavy / light = (≥4-mer) / (2-mer + 3-mer) (also in the main table), ribosomes
+per polysomal mRNA = ΣA_n / Σ(A_n / n) with the tail counted at its lower-bound n (a lower
+bound), and a boundary uncertainty per region (OD above baseline at each edge × 0.5 mm, as a
+fraction of the area). Per-region contrasts: per-block log2(A/B) of each region's
+normalised area (share of mono + poly by default; per ribosomal AUC, per loaded A260 or raw
+selectable — the normalisation is part of the settings hash) with the range over every cut
+moved ± 0.5 mm. Exports carry the new columns, a Regions sheet with a stacked bar chart,
+and the region contrasts. Poly/Mono, A40/A60 and everything outside the polysome partition
+are unchanged; A2/A3 keep their values wherever the 2|3 and 3|4 valleys are usable cuts.
+
 ## 1.2 — 2026-09-04
 Optional alignment mode "shift + scale": per-sample least-squares x = a + b·x_ref on the
 40S/60S/80S/disome/trisome landmarks against their shift-only consensus (linear only);
